@@ -31,7 +31,14 @@ export async function rotasProgresso(app: FastifyInstance, deps: { repo: Reposit
       xp: usuario.xp,
       cota: {
         ...usuario.cota,
-        temasRestantes: temasRestantes(usuario.plano, usuario.cota.questoesUsadas),
+        // Infinity nao sobrevive ao JSON (vira null). O cliente precisa saber a
+        // diferenca entre "sem limite" e "acabou", entao vai explicito.
+        ...(() => {
+          const restantes = temasRestantes(usuario.plano, usuario.cota.questoesUsadas);
+          return Number.isFinite(restantes)
+            ? { ilimitada: false, temasRestantes: restantes }
+            : { ilimitada: true, temasRestantes: null };
+        })(),
       },
       ofensiva: {
         streak: ofensivaVisivel(usuario.ofensiva, agora),

@@ -9,6 +9,7 @@ const CUSTO_ZERO: Custo = {
   tokensSaida: 0,
   tokensCacheEscrito: 0,
   tokensCacheLido: 0,
+  tokensPensamento: 0,
 };
 
 let sequencia = 0;

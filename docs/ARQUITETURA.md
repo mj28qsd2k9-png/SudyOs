@@ -48,21 +48,25 @@ PDF ──(pdf.js, no cliente)──► texto ──► POST /materias
                                           ├─ fatiar em blocos de 2.800 chars
                                           ├─ amostrar o documento INTEIRO ──► mapear temas (1 chamada)
                                           └─ gerar a trilha do 1º tema:
-                                               achar o trecho relevante
-                                               ├─ aula            (1 chamada)  ◄── escreve o cache
-                                               ├─ prova    5 + 5  (2 chamadas) ◄── leem o cache
-                                               └─ fixação  5 + 5  (2 chamadas) ◄── leem o cache
+                                               achar o trecho relevante, e então
+                                               em paralelo:
+                                               ├─ aula            (1 chamada)
+                                               ├─ prova    5 + 5  (2 chamadas, em série)
+                                               └─ fixação  5 + 5  (2 chamadas, em série)
 ```
 
 **A extração do PDF roda no cliente.** Evita subir o arquivo inteiro, mantém o
 backend sem parser de PDF e é o mesmo pdf.js que o protótipo já usava. O
 servidor só quer o texto.
 
+As duas famílias vão em série *dentro* de si porque o segundo lote precisa
+saber o que o primeiro criou, para não repetir. Entre si, tudo é paralelo.
+
 **O primeiro tema é gerado junto com o upload.** O aluno sai da tela de upload
 direto para uma aula, em vez de cair numa lista de temas trancados. Os outros
 temas ele gera quando quiser — cada um gasta cota.
 
-## Prompt caching: por que a aula vai primeiro
+## Prompt caching: o que funciona e o que não funciona
 
 O cache da Anthropic casa por **prefixo**, na ordem `tools → system → messages`.
 Qualquer byte diferente no prefixo invalida tudo depois dele. Daí o desenho:
@@ -76,35 +80,62 @@ messages   tarefa         o que varia: aula? prova? fixação?
 Nada que mude por chamada pode entrar no preâmbulo ou no bloco do material —
 nem data, nem id, nem o nome do tema. Por isso o nome do tema mora na tarefa.
 
-E por isso **a chamada da aula vai sozinha, antes das outras**: é ela que
-escreve o cache. Se as cinco chamadas saíssem em paralelo, as cinco perderiam o
-cache e cada uma pagaria o material inteiro. Assim uma escreve (1,25×) e quatro
-leem (0,1×). Os lotes seguintes vão em paralelo entre as famílias e em série
-dentro da família, porque o segundo lote precisa saber o que o primeiro criou
-para não repetir.
+**O limite, medido em 08/09/2026 numa geração real:** o esquema do structured
+output entra no prefixo **antes** do `system`, junto com as tools. Como cada
+tipo de chamada usa um esquema diferente (aula, prova, fixação), elas **nunca
+compartilham cache**, mesmo com material idêntico. O log da primeira geração
+mostrou três escritas de tamanhos diferentes — 3.920, 4.707 e 4.213 tokens —
+onde o desenho original esperava uma escrita e quatro leituras.
 
-O ganho: o material representa ~2.000 tokens por chamada. Sem cache, 5 chamadas
-custariam ~US$ 0,021 só de entrada; com cache, ~US$ 0,009.
+A consequência prática: **o cache é por família de chamada, não do tema
+inteiro.** O material só é marcado para cache quando a família tem mais de um
+lote para ler de volta (`cachearMaterial` em `PedidoGeracao`); marcar numa
+chamada única é dinheiro jogado fora, porque escrever custa 1,25×.
+
+Com a correção, a aula deixou de ir sozinha na frente (o motivo dela ir primeiro
+era justamente aquecer um cache que não era compartilhado) e passou a rodar em
+**paralelo** com as duas famílias. Resultado medido no mesmo material:
+
+| | antes | depois |
+|---|---|---|
+| custo do tema | US$ 0,1227 | US$ 0,1033 |
+| tempo de parede | 1m53s | 1m23s |
+| escritas de cache sem leitura | 3 | 0 |
 
 ## Custo por tema
 
-Medido em toda geração e devolvido no campo `custoUSD` da resposta — a conta
-abaixo é estimativa, o número real vem de lá.
+**Medido**, não estimado: toda geração devolve `custoUSD` na resposta e loga o
+detalhe por chamada. Um tema de 20 questões com aula, sobre uma apostila de
+8.000 caracteres, com `claude-sonnet-5`:
 
-| Modelo | Tema de 20 questões (aula + exercícios) |
-|---|---|
-| `claude-haiku-4-5` | ~US$ 0,025 |
-| `claude-sonnet-5` (padrão) | ~US$ 0,05 |
-| `claude-opus-5` | ~US$ 0,12 |
+```
+chamada                       usd  entrada   saida   pensa  cache_w  cache_r
+mapa_do_material          0.01219     1954     828       0        0        0
+aula                      0.01382     3070     768       0        0        0
+questoes_de_prova         0.02796      436    1902      62     3226        0
+exercicios_de_fixacao     0.01853      386     846       0     3720        0
+questoes_de_prova         0.02046      594    1863     107        0     3226
+exercicios_de_fixacao     0.01033      529     853      24        0     3720
+TOTAL                     0.10329
+```
 
-O handoff estimava US$ 0,03/tema com Sonnet; a diferença é que aquela conta era
-de um tema menor. Com 20 questões e o plano básico de 80 questões/mês, o custo
-de IA fica em torno de **US$ 0,20 por assinante por mês** — folga confortável
-para o preço de uma assinatura.
+**US$ 0,10 por tema** — bem acima dos US$ 0,03 que o handoff estimava. A
+diferença não é desperdício: são os **tokens de saída**, que sozinhos respondem
+por ~65% da conta. Questão no padrão ENADE tem texto-base mais cinco
+alternativas longas, e isso dá ~380 tokens por questão. O raciocínio do modelo
+(coluna `pensa`) é irrelevante aqui — menos de 200 tokens no total.
 
-Se apertar, os controles já existem: `MODELO_IA=claude-haiku-4-5`, o
-`output_config.effort` por tipo de chamada (a fixação já roda em `low`), e a
-Batch API (−50%) para gerar temas que o aluno não vai jogar no mesmo minuto.
+No plano básico (80 questões/mês = 4 temas), isso dá **~US$ 0,41 de IA por
+assinante por mês**. Continua funcionando para uma assinatura, mas é 3× o que a
+conta original supunha, e o preço precisa ser fechado com esse número.
+
+Os controles, se apertar:
+
+- `MODELO_IA=claude-haiku-4-5` corta o preço por token pela metade (não medido
+  ainda — vale rodar antes de decidir).
+- `output_config.effort` por tipo de chamada; a fixação já roda em `low`.
+- Batch API (−50%) para gerar temas que o aluno não vai jogar no mesmo minuto.
+- Menos alternativas por questão de prova: é o que mais pesa na saída.
 
 ## Structured outputs, com rede de segurança
 

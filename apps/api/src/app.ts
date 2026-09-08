@@ -42,6 +42,7 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
             tokens: {
               entrada: custo.tokensEntrada,
               saida: custo.tokensSaida,
+              pensamento: custo.tokensPensamento,
               cacheEscrito: custo.tokensCacheEscrito,
               cacheLido: custo.tokensCacheLido,
             },

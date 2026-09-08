@@ -297,3 +297,30 @@ describe('conclusao de tema', () => {
     expect(r.json().ofensiva.fuso).toBe('America/Sao_Paulo');
   });
 });
+
+describe('cota no perfil', () => {
+  it('distingue "sem limite" de "acabou" (Infinity nao sobrevive ao JSON)', async () => {
+    const repo = new RepositorioMemoria();
+    const app = await criarApp({ config: config(), repo, gerador: criarGeradorFalso().gerador });
+
+    const livre = await app.inject({
+      method: 'GET',
+      url: '/perfil',
+      headers: { 'x-usuario-id': 'livre' },
+    });
+    expect(livre.json().cota).toMatchObject({ ilimitada: true, temasRestantes: null });
+
+    const usuario = await repo.obterUsuario('pago', 'America/Sao_Paulo');
+    usuario.plano = 'basico';
+    usuario.cota.questoesUsadas = 40;
+    await repo.salvarUsuario(usuario);
+
+    const pago = await app.inject({
+      method: 'GET',
+      url: '/perfil',
+      headers: { 'x-usuario-id': 'pago' },
+    });
+    expect(pago.json().cota).toMatchObject({ ilimitada: false, temasRestantes: 2 });
+    await app.close();
+  });
+});

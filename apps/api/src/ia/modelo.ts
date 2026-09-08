@@ -35,6 +35,8 @@ export type Uso = {
   output_tokens: number;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
+  /** Parte da saida gasta em raciocinio; cobrada como saida. */
+  output_tokens_details?: { thinking_tokens?: number | null } | null;
 };
 
 export type Custo = {
@@ -45,6 +47,8 @@ export type Custo = {
   tokensSaida: number;
   tokensCacheEscrito: number;
   tokensCacheLido: number;
+  /** Quanto da saida foi raciocinio. E o alvo do `effort` quando a conta aperta. */
+  tokensPensamento: number;
 };
 
 /**
@@ -59,6 +63,7 @@ export function calcularCusto(modelo: ModeloId, uso: Uso): Custo {
   const tokensSaida = uso.output_tokens ?? 0;
   const tokensCacheEscrito = uso.cache_creation_input_tokens ?? 0;
   const tokensCacheLido = uso.cache_read_input_tokens ?? 0;
+  const tokensPensamento = uso.output_tokens_details?.thinking_tokens ?? 0;
 
   const entradaUSD =
     (tokensEntrada * preco.entrada +
@@ -75,6 +80,7 @@ export function calcularCusto(modelo: ModeloId, uso: Uso): Custo {
     tokensSaida,
     tokensCacheEscrito,
     tokensCacheLido,
+    tokensPensamento,
   };
 }
 
@@ -88,6 +94,7 @@ export function somarCustos(custos: Custo[]): Custo {
       tokensSaida: acc.tokensSaida + c.tokensSaida,
       tokensCacheEscrito: acc.tokensCacheEscrito + c.tokensCacheEscrito,
       tokensCacheLido: acc.tokensCacheLido + c.tokensCacheLido,
+      tokensPensamento: acc.tokensPensamento + c.tokensPensamento,
     }),
     {
       entradaUSD: 0,
@@ -97,6 +104,7 @@ export function somarCustos(custos: Custo[]): Custo {
       tokensSaida: 0,
       tokensCacheEscrito: 0,
       tokensCacheLido: 0,
+      tokensPensamento: 0,
     },
   );
 }

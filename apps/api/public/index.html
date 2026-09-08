@@ -43,6 +43,7 @@
 
   <div class="linha">
     <label>Usuário: <input type="text" id="usuario" value="usuario-zero" size="14"></label>
+    <button class="sec" id="btCarregar">Carregar matérias</button>
     <button class="sec" id="btPerfil">Ver perfil</button>
     <button class="sec" id="btSaude">Saúde da API</button>
   </div>
@@ -58,10 +59,20 @@
 </main>
 
 <script type="module">
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
 const $ = (id) => document.getElementById(id);
+
+/**
+ * O pdf.js vem de CDN e pode não carregar (rede restrita, CDN fora do ar).
+ * Configurar o worker no topo do módulo fazia a falha derrubar o script inteiro
+ * e matar até os botões que não têm nada a ver com PDF. Agora a checagem é
+ * local: sem pdf.js só a leitura de PDF para, o resto da página continua de pé.
+ */
+function pdfDisponivel() {
+  if (typeof pdfjsLib === 'undefined') return false;
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return true;
+}
 const saida = $('saida');
 const estado = { materia: null };
 
@@ -91,6 +102,12 @@ async function api(caminho, opcoes = {}) {
 
 /** Extrai o texto do PDF no cliente: o backend só quer o texto. */
 async function extrairTexto(arquivo) {
+  if (!pdfDisponivel()) {
+    throw new Error(
+      'O pdf.js não carregou (CDN bloqueado ou fora do ar). ' +
+        'O resto da página continua funcionando; só a leitura de PDF depende dele.',
+    );
+  }
   const pdf = await pdfjsLib.getDocument({ data: await arquivo.arrayBuffer() }).promise;
   const paginas = Math.min(pdf.numPages, 60);
   let texto = '';
@@ -108,6 +125,18 @@ $('arquivo').addEventListener('change', (e) => {
 
 $('btSaude').addEventListener('click', async () => {
   saida.innerHTML = `<pre>${JSON.stringify(await api('/saude'), null, 2)}</pre>`;
+});
+
+// Gerar custa dinheiro; recarregar a página não pode obrigar a gerar de novo.
+$('btCarregar').addEventListener('click', async () => {
+  const { materias } = await api('/materias');
+  if (!materias.length) {
+    status('Esse usuário ainda não tem matéria nenhuma.');
+    return;
+  }
+  estado.materia = materias[0];
+  status(`${materias.length} matéria(s). Mostrando a mais recente.`, 100);
+  render();
 });
 
 $('btPerfil').addEventListener('click', async () => {

@@ -40,13 +40,30 @@ describe('criarGerador', () => {
     expect(r.fallback).toBe(false);
 
     const enviado = parse.mock.calls[0]![0] as Record<string, any>;
-    // O preambulo vem primeiro e o material por ultimo, com o marcador de cache:
-    // e o que faz as chamadas seguintes lerem do cache em vez de repagar o material.
+    // O preambulo vem primeiro e o material por ultimo; a tarefa, que muda a
+    // cada chamada, fica DEPOIS desse prefixo — e o que torna o prefixo estavel.
     expect(enviado['system'][0].text).toBe(PREAMBULO);
     expect(enviado['system'][1].text).toBe(pedido.material);
-    expect(enviado['system'][1].cache_control).toEqual({ type: 'ephemeral' });
-    // A tarefa, que muda a cada chamada, fica DEPOIS do prefixo.
     expect(enviado['messages'][0].content).toBe(pedido.tarefa);
+  });
+
+  it('so marca o material para cache quando pedem', async () => {
+    // Escrever cache custa 1,25x. Sem uma segunda chamada do MESMO esquema para
+    // ler de volta, marcar so faz a conta subir — foi o que aconteceu na
+    // primeira geracao real, com a aula e o mapa escrevendo cache a toa.
+    const parse = vi.fn().mockResolvedValue({ parsed_output: RESPOSTA, usage: USO });
+    const gerador = criarGerador({
+      modelo: 'claude-sonnet-5',
+      cliente: clienteFalso({ parse, create: vi.fn() }),
+    });
+
+    await gerador.gerar(pedido);
+    expect((parse.mock.calls[0]![0] as any).system[1].cache_control).toBeUndefined();
+
+    await gerador.gerar({ ...pedido, cachearMaterial: true });
+    expect((parse.mock.calls[1]![0] as any).system[1].cache_control).toEqual({
+      type: 'ephemeral',
+    });
   });
 
   it('cai para texto livre quando o structured output nao e aceito', async () => {

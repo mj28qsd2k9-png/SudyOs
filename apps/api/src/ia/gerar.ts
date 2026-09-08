@@ -97,11 +97,15 @@ export type TrilhaGerada = {
 /**
  * Gera a trilha completa de um tema: aula + questoes.
  *
- * A ordem das chamadas e deliberada. A aula vai sozinha primeiro porque e ela
- * que ESCREVE o cache do material; se as tres primeiras chamadas saissem juntas,
- * as tres pagariam a escrita do material em vez de uma pagar e duas lerem. Os
- * lotes seguintes vao em paralelo entre familias e em serie dentro da familia,
- * porque o segundo lote precisa saber o que o primeiro ja criou para nao repetir.
+ * As tres frentes (aula, prova, fixacao) saem em PARALELO, e dentro de cada
+ * familia os lotes vao em serie, porque o segundo lote precisa saber o que o
+ * primeiro criou para nao repetir.
+ *
+ * O cache do material e por familia, nao do tema inteiro: o esquema do
+ * structured output entra no prefixo antes do system, entao chamadas com
+ * esquemas diferentes nunca compartilham cache (medido em 08/09/2026 — as tres
+ * frentes escreveram tres entradas de tamanhos diferentes). Por isso o material
+ * so e marcado para cache quando a familia tem mais de um lote para ler de volta.
  */
 export async function gerarTrilha(
   gerador: GeradorIA,
@@ -112,26 +116,26 @@ export async function gerarTrilha(
   const material = blocoMaterial(trechoRelevante(blocos, tema));
   const custos: Custo[] = [];
 
-  // 1) Aula sozinha: ensina primeiro e aquece o cache do material.
-  let aula: Aula | null = null;
-  try {
-    const r = await gerador.gerar({
-      material,
-      tarefa: tarefaAula(tema.nome),
-      esquema: AulaGeradaSchema,
-      nomeEsquema: 'aula',
-      maxTokens: 3000,
-      esforco: 'medium',
-    });
-    custos.push(r.custo);
-    const validada = AulaSchema.safeParse(r.dados);
-    if (validada.success) aula = validada.data;
-  } catch {
-    // Tema sem aula ainda e jogavel; o cliente cai direto no conceito curto.
-    aula = null;
-  }
+  const rodarAula = async (): Promise<Aula | null> => {
+    try {
+      const r = await gerador.gerar({
+        material,
+        tarefa: tarefaAula(tema.nome),
+        esquema: AulaGeradaSchema,
+        nomeEsquema: 'aula',
+        maxTokens: 3000,
+        esforco: 'medium',
+      });
+      custos.push(r.custo);
+      const validada = AulaSchema.safeParse(r.dados);
+      return validada.success ? validada.data : null;
+    } catch {
+      // Tema sem aula ainda e jogavel; o cliente cai direto no conceito curto.
+      return null;
+    }
+  };
 
-  // 2) Metade prova, metade fixacao, em lotes.
+  // Metade prova, metade fixacao, em lotes.
   const alvoProva = Math.ceil(alvoQuestoes / 2);
   const alvoFixacao = alvoQuestoes - alvoProva;
 
@@ -140,7 +144,8 @@ export async function gerarTrilha(
 
   const rodarProva = async (): Promise<Questao[]> => {
     const saida: Questao[] = [];
-    for (const quantas of dividirEmLotes(alvoProva)) {
+    const lotes = dividirEmLotes(alvoProva);
+    for (const quantas of lotes) {
       try {
         const r = await gerador.gerar({
           material,
@@ -149,6 +154,7 @@ export async function gerarTrilha(
           nomeEsquema: 'questoes_de_prova',
           maxTokens: 4000,
           esforco: 'medium',
+          cachearMaterial: lotes.length > 1,
         });
         custos.push(r.custo);
         brutasProva += r.dados.questoes.length;
@@ -165,7 +171,8 @@ export async function gerarTrilha(
 
   const rodarFixacao = async (): Promise<Questao[]> => {
     const saida: Questao[] = [];
-    for (const quantas of dividirEmLotes(alvoFixacao)) {
+    const lotes = dividirEmLotes(alvoFixacao);
+    for (const quantas of lotes) {
       try {
         const r = await gerador.gerar({
           material,
@@ -174,6 +181,7 @@ export async function gerarTrilha(
           nomeEsquema: 'exercicios_de_fixacao',
           maxTokens: 3000,
           esforco: 'low',
+          cachearMaterial: lotes.length > 1,
         });
         custos.push(r.custo);
         brutasFixacao += r.dados.questoes.length;
@@ -188,7 +196,11 @@ export async function gerarTrilha(
     return saida;
   };
 
-  const [prova, fixacao] = await Promise.all([rodarProva(), rodarFixacao()]);
+  const [aula, prova, fixacao] = await Promise.all([
+    rodarAula(),
+    rodarProva(),
+    rodarFixacao(),
+  ]);
 
   const questoes = intercalar(deduplicar([...prova, ...fixacao]));
   const custo = somarCustos(custos);

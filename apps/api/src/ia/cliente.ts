@@ -8,15 +8,26 @@ import { PREAMBULO } from './prompts.js';
 export type Esforco = 'low' | 'medium' | 'high';
 
 export type PedidoGeracao<T> = {
-  /** Bloco estavel: o material. Vai no system e recebe o marcador de cache. */
+  /** Bloco estavel: o material. Vai no fim do system, antes da tarefa. */
   material: string;
-  /** Instrucao desta chamada. Vai no user, depois do prefixo cacheado. */
+  /** Instrucao desta chamada. Vai no user, depois do prefixo estavel. */
   tarefa: string;
   esquema: z.ZodType<T>;
   /** Rotulo desta chamada no log de custo. */
   nomeEsquema: string;
   maxTokens?: number;
   esforco?: Esforco;
+  /**
+   * Marca o material para cache. So vale a pena quando OUTRA chamada com o
+   * MESMO esquema vai reaproveitar o prefixo — escrever custa 1,25x, e uma
+   * escrita sem leitura e dinheiro jogado fora.
+   *
+   * Medido em 08/09/2026: o esquema do structured output entra no prefixo
+   * ANTES do system (a ordem e tools -> system -> messages), entao chamadas com
+   * esquemas diferentes NAO compartilham cache, mesmo com material identico.
+   * Por isso o cache e por familia de chamada, e nao do tema inteiro.
+   */
+  cachearMaterial?: boolean;
 };
 
 export type RespostaGeracao<T> = {
@@ -64,15 +75,21 @@ export function criarGerador(opcoes: OpcoesGerador): GeradorIA {
   const tentativas = opcoes.tentativas ?? 3;
 
   /**
-   * O system carrega o preambulo (identico em toda chamada) e o material, com o
-   * marcador de cache no fim do material. Tudo que varia fica no user, DEPOIS do
-   * prefixo — e o que faz as chamadas seguintes lerem do cache em vez de pagar
-   * o material de novo.
+   * O system carrega o preambulo (identico em toda chamada) e o material. Tudo
+   * que varia por chamada fica no user, DEPOIS desse prefixo — e o que permite
+   * a chamada seguinte da mesma familia ler o material do cache.
+   *
+   * O marcador de cache so entra quando quem chamou disse que ha uma segunda
+   * chamada com o mesmo esquema para aproveitar. Ver `cachearMaterial`.
    */
-  function montarSystem(material: string): Anthropic.TextBlockParam[] {
+  function montarSystem(material: string, cachear: boolean): Anthropic.TextBlockParam[] {
     return [
       { type: 'text', text: PREAMBULO },
-      { type: 'text', text: material, cache_control: { type: 'ephemeral' } },
+      {
+        type: 'text',
+        text: material,
+        ...(cachear ? { cache_control: { type: 'ephemeral' as const } } : {}),
+      },
     ];
   }
 
@@ -95,7 +112,7 @@ export function criarGerador(opcoes: OpcoesGerador): GeradorIA {
     const comum = {
       model: modelo,
       max_tokens: maxTokens,
-      system: montarSystem(pedido.material),
+      system: montarSystem(pedido.material, pedido.cachearMaterial ?? false),
       output_config: { effort: pedido.esforco ?? 'medium' },
     } as const;
 

@@ -20,7 +20,9 @@ O **backend de geração**, completo e testado:
 - **cota do plano** aplicada no servidor (80 questões/mês no plano básico);
 - **ofensiva server-authoritative**: a data vem do relógio do servidor no fuso
   do aluno, e a correção das respostas também é do servidor;
-- custo de cada geração medido e devolvido na resposta.
+- custo de cada geração medido e devolvido na resposta (~US$ 0,10 por tema de
+  20 questões com Sonnet 5 — número medido, não estimado; ver
+  [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)).
 
 O que ainda não existe está em [`docs/ROADMAP.md`](docs/ROADMAP.md) — o próximo
 passo é o app em React Native + Expo.
@@ -39,9 +41,12 @@ extrai o texto de um PDF no navegador (pdf.js) e exercita a API de ponta a
 ponta. É ferramenta de desenvolvimento, não o app.
 
 ```bash
-npm test           # 74 testes, nenhum toca a rede
+npm test           # 76 testes, nenhum toca a rede
 npm run typecheck
 ```
+
+O `npm run dev` e o `npm start` leem o `.env` da raiz pelo suporte nativo do
+Node (`--env-file-if-exists`), sem dependência de dotenv.
 
 ## Estrutura
 

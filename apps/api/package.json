@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Backend do Estuda AI: recebe o texto do material e gera aula + trilha de questoes",
   "scripts": {
-    "dev": "tsx watch src/servidor.ts",
-    "start": "node dist/servidor.js",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/servidor.ts",
+    "start": "node --env-file-if-exists=../../.env dist/servidor.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
