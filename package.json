@@ -1,0 +1,20 @@
+{
+  "name": "estuda-ai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Estuda AI - app de estudos gamificado: PDF da materia vira aula + trilha de exercicios",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/api"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace @estudaai/api",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

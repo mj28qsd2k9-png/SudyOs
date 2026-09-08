@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estuda AI — banco de testes da API</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{--laranja:#E8501A;--texto:#4A3B32;--texto2:#9B8579;--borda:#F0E4D8;--fundo:#FFF9F4;--card:#fff;--verde:#2FA36B;--vermelho:#EF5B5B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font:15px/1.5 system-ui,-apple-system,sans-serif;background:var(--fundo);color:var(--texto);padding:24px}
+  main{max-width:820px;margin:0 auto}
+  h1{font-size:22px;color:var(--laranja)}
+  h2{font-size:16px;margin:22px 0 8px}
+  .aviso{background:#FDEEE1;border-radius:10px;padding:12px 14px;font-size:13px;color:var(--texto2);margin:10px 0 18px}
+  .linha{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  button{font:inherit;font-weight:700;color:#fff;background:var(--laranja);border:none;border-radius:10px;padding:9px 14px;cursor:pointer}
+  button.sec{background:var(--card);color:var(--laranja);border:1px solid var(--borda)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  input[type=text]{font:inherit;padding:8px 10px;border:1px solid var(--borda);border-radius:8px;background:var(--card)}
+  .card{background:var(--card);border:1px solid var(--borda);border-radius:12px;padding:14px;margin-top:10px}
+  .meta{font-size:12.5px;color:var(--texto2)}
+  .erro{background:#FDE7E7;color:#B32B2B;border-radius:10px;padding:12px;margin-top:10px;font-weight:600}
+  .ok{color:var(--verde);font-weight:700}
+  .tag{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:#FFE3D1;color:var(--laranja);border-radius:99px;padding:2px 8px;margin-right:6px}
+  ol,ul{padding-left:20px}
+  li{margin:4px 0}
+  .certa{color:var(--verde);font-weight:700}
+  pre{background:#1e1b18;color:#f5efe9;padding:12px;border-radius:10px;overflow-x:auto;font-size:12px}
+  .barra{height:6px;background:var(--borda);border-radius:99px;overflow:hidden;margin:10px 0}
+  .barra i{display:block;height:100%;background:var(--laranja);width:0;transition:width .3s}
+</style>
+</head>
+<body>
+<main>
+  <h1>Estuda AI — banco de testes da API</h1>
+  <p class="aviso">
+    Ferramenta de desenvolvimento, não o app. Ela extrai o texto do PDF no navegador
+    (pdf.js, igual ao protótipo) e exercita o backend de ponta a ponta: mapear temas,
+    gerar aula + questões e concluir um tema. As respostas certas aparecem à vista de
+    propósito — o objetivo aqui é inspecionar o que a IA produziu.
+  </p>
+
+  <div class="linha">
+    <label>Usuário: <input type="text" id="usuario" value="usuario-zero" size="14"></label>
+    <button class="sec" id="btPerfil">Ver perfil</button>
+    <button class="sec" id="btSaude">Saúde da API</button>
+  </div>
+
+  <div class="linha">
+    <input type="file" id="arquivo" accept="application/pdf">
+    <button id="btSubir" disabled>Subir e gerar</button>
+  </div>
+  <div class="barra"><i id="prog"></i></div>
+  <div class="meta" id="status">Escolha um PDF com texto (não pode ser escaneado).</div>
+
+  <div id="saida"></div>
+</main>
+
+<script type="module">
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const $ = (id) => document.getElementById(id);
+const saida = $('saida');
+const estado = { materia: null };
+
+const cabecalhos = () => ({
+  'Content-Type': 'application/json',
+  'x-usuario-id': $('usuario').value.trim() || 'usuario-zero',
+  'x-fuso': Intl.DateTimeFormat().resolvedOptions().timeZone,
+});
+
+function status(texto, pct) {
+  $('status').textContent = texto;
+  if (pct !== undefined) $('prog').style.width = pct + '%';
+}
+
+function erro(msg) {
+  saida.insertAdjacentHTML('afterbegin', `<div class="erro">${msg}</div>`);
+}
+
+async function api(caminho, opcoes = {}) {
+  const r = await fetch(caminho, { ...opcoes, headers: cabecalhos() });
+  const corpo = await r.json().catch(() => ({}));
+  if (!r.ok && r.status !== 207) {
+    throw new Error(corpo.erro || `${r.status} ${r.statusText}`);
+  }
+  return corpo;
+}
+
+/** Extrai o texto do PDF no cliente: o backend só quer o texto. */
+async function extrairTexto(arquivo) {
+  const pdf = await pdfjsLib.getDocument({ data: await arquivo.arrayBuffer() }).promise;
+  const paginas = Math.min(pdf.numPages, 60);
+  let texto = '';
+  for (let i = 1; i <= paginas; i++) {
+    status(`Lendo o PDF… página ${i} de ${paginas}`, (i / paginas) * 25);
+    const conteudo = await (await pdf.getPage(i)).getTextContent();
+    texto += conteudo.items.map((x) => x.str).join(' ') + '\n';
+  }
+  return texto.replace(/\s+/g, ' ').trim();
+}
+
+$('arquivo').addEventListener('change', (e) => {
+  $('btSubir').disabled = !e.target.files.length;
+});
+
+$('btSaude').addEventListener('click', async () => {
+  saida.innerHTML = `<pre>${JSON.stringify(await api('/saude'), null, 2)}</pre>`;
+});
+
+$('btPerfil').addEventListener('click', async () => {
+  saida.innerHTML = `<pre>${JSON.stringify(await api('/perfil'), null, 2)}</pre>`;
+});
+
+$('btSubir').addEventListener('click', async () => {
+  const arquivo = $('arquivo').files[0];
+  if (!arquivo) return;
+  saida.innerHTML = '';
+  $('btSubir').disabled = true;
+  try {
+    const texto = await extrairTexto(arquivo);
+    status(`${texto.length} caracteres extraídos. Mapeando temas e gerando o primeiro…`, 45);
+
+    const inicio = performance.now();
+    const r = await api('/materias', { method: 'POST', body: JSON.stringify({ texto }) });
+    const segundos = ((performance.now() - inicio) / 1000).toFixed(1);
+
+    estado.materia = r.materia;
+    status(`Pronto em ${segundos}s. Custo: US$ ${r.custoUSD ?? 0}`, 100);
+    if (r.erro) erro(r.erro);
+    render();
+  } catch (e) {
+    status('Falhou.', 0);
+    erro(e.message);
+  } finally {
+    $('btSubir').disabled = false;
+  }
+});
+
+function render() {
+  const m = estado.materia;
+  if (!m) return;
+  saida.innerHTML = `
+    <h2>${m.nome}</h2>
+    <div class="meta">${m.temas.length} temas · id ${m.id}</div>
+    ${m.temas.map((t, i) => cardTema(t, i)).join('')}
+  `;
+  saida.querySelectorAll('[data-gerar]').forEach((b) => {
+    b.addEventListener('click', () => gerar(b.dataset.gerar));
+  });
+  saida.querySelectorAll('[data-concluir]').forEach((b) => {
+    b.addEventListener('click', () => concluir(b.dataset.concluir));
+  });
+}
+
+function cardTema(t, i) {
+  if (!t.questoes) {
+    return `<div class="card">
+      <b>${i + 1}. ${t.nome}</b>
+      <div class="meta">${t.conceito || ''}</div>
+      <div class="linha" style="margin-top:10px">
+        <button data-gerar="${t.id}">Gerar este tema</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="card">
+    <b>${i + 1}. ${t.nome}</b>
+    <div class="meta">${t.questoes.length} questões${t.aula ? ' · com aula' : ' · SEM aula'}</div>
+    ${t.aula ? bloquinhosAula(t.aula) : ''}
+    <h2>Questões</h2>
+    <ol>${t.questoes.map(questaoHTML).join('')}</ol>
+    <div class="linha" style="margin-top:12px">
+      <button data-concluir="${t.id}">Concluir acertando tudo</button>
+    </div>
+  </div>`;
+}
+
+function bloquinhosAula(aula) {
+  return `<h2>Aula</h2>
+    ${aula.blocos.map((b) => `<p><b>${b.titulo}</b><br>${b.texto}</p>`).join('')}
+    ${aula.resumo.length ? `<ul>${aula.resumo.map((r) => `<li>${r}</li>`).join('')}</ul>` : ''}`;
+}
+
+function questaoHTML(q) {
+  const cabeca = `<span class="tag">${q.tipo}</span><span class="tag">${q.familia}</span>`;
+  const rodape = `<div class="meta">${q.explicacao}${
+    q.tags?.length ? ` · tags: ${q.tags.join(', ')}` : ''
+  }</div>`;
+  const alternativas = (opcoes, correta) =>
+    `<ul>${opcoes
+      .map((o, i) => `<li class="${i === correta ? 'certa' : ''}">${o}</li>`)
+      .join('')}</ul>`;
+
+  let corpo = '';
+  if (q.tipo === 'mc' || q.tipo === 'calc' || q.tipo === 'cenario') {
+    corpo = `${q.contexto ? `<i>${q.contexto}</i><br>` : ''}${q.pergunta}${alternativas(
+      q.opcoes,
+      q.correta,
+    )}`;
+  } else if (q.tipo === 'tf') {
+    corpo = `${q.pergunta}<br><span class="certa">${q.resposta ? 'Verdadeiro' : 'Falso'}</span>`;
+  } else if (q.tipo === 'fill') {
+    corpo = `${q.antes}<b>____</b>${q.depois}${alternativas(q.opcoes, q.correta)}`;
+  } else if (q.tipo === 'match') {
+    corpo = `<ul>${q.pares.map(([a, b]) => `<li><b>${a}</b> → ${b}</li>`).join('')}</ul>`;
+  } else if (q.tipo === 'ordenar') {
+    corpo = `${q.instrucao}<ol>${q.ordem_correta.map((x) => `<li>${x}</li>`).join('')}</ol>`;
+  }
+  return `<li style="margin:14px 0">${cabeca}<div>${corpo}</div>${rodape}</li>`;
+}
+
+async function gerar(temaId) {
+  status('Gerando o tema…', 60);
+  try {
+    const r = await api(`/materias/${estado.materia.id}/temas/${temaId}/gerar`, { method: 'POST' });
+    estado.materia = r.materia;
+    status(
+      `Tema gerado. Custo: US$ ${r.custoUSD}${
+        r.descartadas ? ` · ${r.descartadas} questão(ões) descartada(s)` : ''
+      }`,
+      100,
+    );
+    render();
+  } catch (e) {
+    erro(e.message);
+  }
+}
+
+/** Manda as respostas certas para ver a correção e a ofensiva subirem no servidor. */
+async function concluir(temaId) {
+  const tema = estado.materia.temas.find((t) => t.id === temaId);
+  const respostas = tema.questoes.map((q) => {
+    if (q.tipo === 'tf') return q.resposta;
+    if (q.tipo === 'ordenar') return q.ordem_correta;
+    if (q.tipo === 'match') return true;
+    return q.correta;
+  });
+  try {
+    const r = await api('/progresso/concluir', {
+      method: 'POST',
+      body: JSON.stringify({ materiaId: estado.materia.id, temaId, respostas }),
+    });
+    saida.insertAdjacentHTML(
+      'afterbegin',
+      `<div class="card"><b class="ok">Concluído no servidor</b><pre>${JSON.stringify(
+        r,
+        null,
+        2,
+      )}</pre></div>`,
+    );
+  } catch (e) {
+    erro(e.message);
+  }
+}
+</script>
+</body>
+</html>
