@@ -544,3 +544,19 @@ describe('nome da materia', () => {
     },
   );
 });
+
+describe('aviso de material cortado', () => {
+  it('nao avisa quando o PDF coube inteiro', async () => {
+    const app = await criarApp({
+      config: config(),
+      repo: new RepositorioMemoria(),
+      gerador: criarGeradorFalso().gerador,
+    });
+    const r = await enviarArquivo(app, multipart(await lerFixturePdf(), 'Apostila.pdf'));
+    const tarefa = await aguardarTarefa(app, r.json().tarefaId);
+    expect(tarefa.estado).toBe('concluida');
+    // O fixture tem 6 paginas; nada foi cortado, entao nada a avisar.
+    expect(tarefa.resultado.aviso).toBeUndefined();
+    await app.close();
+  });
+});

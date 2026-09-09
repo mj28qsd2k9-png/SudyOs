@@ -50,7 +50,14 @@ export default function Gerando() {
         await recarregar();
         retorno.conquista();
         const destino = tarefa.resultado?.materiaId ?? materiaId;
-        router.replace(destino ? `/materia/${destino}` : '/(abas)');
+        router.replace(
+          destino
+            ? {
+                pathname: '/materia/[id]',
+                params: { id: destino, ...(tarefa.resultado?.aviso ? { aviso: tarefa.resultado.aviso } : {}) },
+              }
+            : '/(abas)',
+        );
       } catch {
         if (vivo) {
           setFalha({

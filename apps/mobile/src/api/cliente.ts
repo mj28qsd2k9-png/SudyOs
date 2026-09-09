@@ -83,7 +83,7 @@ export type Tarefa = {
   estado: 'na_fila' | 'rodando' | 'concluida' | 'falhou';
   etapa: string;
   progresso: number;
-  resultado?: { materiaId: string; temaId: string | null; custoUSD: number };
+  resultado?: { materiaId: string; temaId: string | null; custoUSD: number; aviso?: string };
   falha?: { mensagem: string; codigo: string; adiantaTentarDeNovo: boolean };
 };
 

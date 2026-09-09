@@ -62,6 +62,29 @@ servidor só quer o texto.
 As duas famílias vão em série *dentro* de si porque o segundo lote precisa
 saber o que o primeiro criou, para não repetir. Entre si, tudo é paralelo.
 
+### Cobrir o documento inteiro é mais difícil do que parece
+
+Duas armadilhas, as duas encontradas em 09/09/2026 testando com material do
+tamanho de uma apostila de verdade — e as duas invisíveis com material pequeno:
+
+**A amostra do mapeamento.** Percorrer os blocos em ordem até encher o limite
+parece cobrir o documento e não cobre: num material de 150 páginas cabem os ~12
+primeiros blocos, ou seja, as primeiras páginas. O código dizia "documento
+INTEIRO" e fazia o contrário; o teste passava porque usava 20 blocos e conferia
+o décimo. Agora a amostra é **distribuída**: pedaços espalhados do primeiro ao
+último bloco.
+
+**O teto de temas.** Corrigida a amostra, o modelo passou a *ver* o documento
+inteiro e ainda assim entregava 6 temas tirados das 6 primeiras unidades — o
+teto fixo era o gargalo seguinte. A faixa agora acompanha o material (4 a 8 num
+resumo, até 14 numa apostila) e quem escolhe dentro dela é o modelo, que é quem
+vê quantos assuntos distintos existem.
+
+Isso afina a decisão do handoff — "uma matéria tem ~5 temas" — sem contrariá-la:
+a intenção é que **um tema seja um dia de estudo**, e livro grande tem mais dias.
+E tema a mais é barato, porque só o primeiro é gerado no upload; os outros
+esperam o aluno pedir. Tema a menos é caro: é material que nunca vira estudo.
+
 **O primeiro tema é gerado junto com o upload.** O aluno sai da tela de upload
 direto para uma aula, em vez de cair numa lista de temas trancados. Os outros
 temas ele gera quando quiser — cada um gasta cota.

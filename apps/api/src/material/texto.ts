@@ -24,18 +24,36 @@ export function fatiar(texto: string, tamanho = 2800): string[] {
 }
 
 /**
- * Amostra o documento INTEIRO para o mapeamento de temas.
+ * Amostra o documento inteiro para o mapeamento de temas.
  *
- * Mandar so o comeco faria a IA propor temas do inicio da apostila e ignorar o
- * resto — foi por isso que o prototipo passou a amostrar bloco a bloco.
+ * Percorrer os blocos em ordem ate encher o limite parece cobrir o documento, e
+ * nao cobre: num material de 150 paginas cabem so os ~12 primeiros blocos, ou
+ * seja, as primeiras paginas. Foi assim ate 09/09/2026, e o efeito era o pior
+ * possivel — a IA propunha 6 temas todos tirados do comeco da apostila e o
+ * resto do material nunca virava tema.
+ *
+ * Agora a amostra e distribuida: pega pedacos espalhados por todo o documento,
+ * do primeiro bloco ao ultimo. Material pequeno continua entrando inteiro.
  */
-export function amostra(blocos: string[], limite = 11_000): string {
-  let saida = '';
-  for (const bloco of blocos) {
-    saida += bloco.slice(0, 900) + ' [...] ';
-    if (saida.length >= limite) break;
-  }
-  return saida.slice(0, limite);
+export function amostra(blocos: string[], limite = 11_000, maxPedacos = 24): string {
+  if (blocos.length === 0) return '';
+
+  const quantos = Math.min(blocos.length, maxPedacos);
+  const porPedaco = Math.max(300, Math.floor(limite / quantos));
+
+  const indices =
+    quantos === blocos.length
+      ? blocos.map((_, i) => i)
+      : Array.from({ length: quantos }, (_, i) =>
+          // Inclui sempre o primeiro e o ultimo bloco: o comeco costuma ter o
+          // sumario e o fim costuma ter o assunto que ninguem alcanca.
+          Math.round((i * (blocos.length - 1)) / (quantos - 1)),
+        );
+
+  return indices
+    .map((i) => blocos[i]!.slice(0, porPedaco))
+    .join(' [...] ')
+    .slice(0, limite);
 }
 
 function semAcento(s: string): string {

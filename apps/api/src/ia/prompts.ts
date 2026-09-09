@@ -22,13 +22,29 @@ export function blocoMaterial(conteudo: string): string {
   return `CONTEUDO:\n${conteudo}`;
 }
 
-/** Mapeia os temas olhando o documento inteiro, nao so o comeco. */
-export function tarefaOutline(): string {
+/**
+ * Mapeia os temas olhando o documento inteiro, nao so o comeco.
+ *
+ * A quantidade de temas acompanha o tamanho do material. Pedir sempre "4 a 6"
+ * funciona num resumo e falha numa apostila: medido em 09/09/2026, um material
+ * com 8 unidades distintas virou 6 temas tirados das 6 primeiras, e as duas
+ * ultimas unidades ficaram sem tema nenhum. O handoff diz "uma materia tem ~5
+ * temas", que descreve o caso comum — a intencao e que um tema seja um dia de
+ * estudo, e livro grande tem mais dias.
+ */
+export function tarefaOutline(minimo: number, maximo: number): string {
   return (
-    'Identifique a materia deste documento e de 4 a 6 temas que cubram o ' +
-    'documento INTEIRO — nao apenas o comeco. Ordene os temas como aparecem no ' +
-    'material. Para cada tema, escreva um conceito de 1 a 2 frases suas e liste ' +
-    'de 3 a 5 palavras-chave que ajudem a localizar esse tema no material.'
+    'Identifique a materia deste documento e liste os temas de estudo dele.\n\n' +
+    'Antes de escolher, percorra TODOS os trechos mostrados e anote quais ' +
+    'assuntos diferentes aparecem — inclusive os que so aparecem no fim do ' +
+    'material. Depois crie um tema para cada assunto encontrado.\n\n' +
+    `Use de ${minimo} a ${maximo} temas: quantos o material pedir, nem mais nem ` +
+    'menos. Nao invente subdivisao para chegar ao maximo, e nao junte assuntos ' +
+    'diferentes num tema so para caber no minimo — assunto que aparece no ' +
+    'material e fica sem tema e material que o aluno nunca vai estudar.\n\n' +
+    'Ordene os temas como aparecem no material. Para cada tema, escreva um ' +
+    'conceito de 1 a 2 frases suas e liste de 3 a 5 palavras-chave que ajudem a ' +
+    'localizar esse tema no material.'
   );
 }
 

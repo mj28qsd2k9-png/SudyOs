@@ -50,6 +50,24 @@ function jaCriadas(questoes: Questao[]): string {
     .join(' | ');
 }
 
+/**
+ * Faixa de temas a pedir.
+ *
+ * O teto e generoso de proposito e quem escolhe dentro dele e o modelo, que e
+ * quem ve quantos assuntos distintos o material tem. Amarrar a contagem so ao
+ * tamanho errava dos dois lados: medido em 09/09/2026, um material com 8
+ * unidades distintas cabia na conta como "5 temas" e as 3 ultimas unidades
+ * ficavam sem tema.
+ *
+ * Tema a mais e barato: so o primeiro tema e gerado no upload, os outros ficam
+ * esperando o aluno pedir. Um tema que ele nunca abrir custa uma linha na lista
+ * e nada de IA. Tema a menos e caro: e material que nunca vira estudo.
+ */
+export function faixaDeTemas(blocos: string[]): { minimo: number; maximo: number } {
+  const caracteres = blocos.reduce((soma, b) => soma + b.length, 0);
+  return { minimo: 4, maximo: Math.min(14, Math.max(8, Math.round(caracteres / 12_000))) };
+}
+
 export type MapeamentoMaterial = {
   nome: string;
   temas: { nome: string; conceito: string; chave: string[] }[];
@@ -61,9 +79,10 @@ export async function mapearMaterial(
   gerador: GeradorIA,
   blocos: string[],
 ): Promise<MapeamentoMaterial> {
+  const faixa = faixaDeTemas(blocos);
   const { dados, custo } = await gerador.gerar({
     material: blocoMaterial(amostra(blocos)),
-    tarefa: tarefaOutline(),
+    tarefa: tarefaOutline(faixa.minimo, faixa.maximo),
     esquema: OutlineSchema,
     nomeEsquema: 'mapa_do_material',
     maxTokens: 2000,
@@ -72,7 +91,7 @@ export async function mapearMaterial(
 
   const temas = dados.temas
     .filter((t) => t.nome.trim().length > 0)
-    .slice(0, 6)
+    .slice(0, faixa.maximo)
     .map((t) => ({
       nome: t.nome.trim(),
       conceito: t.conceito.trim(),

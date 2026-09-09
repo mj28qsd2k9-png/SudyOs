@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ErroPdf, extrairTextoDoPdf, pareceePdf } from '../src/material/pdf.js';
+import { ErroPdf, extrairTextoDoPdf, MAX_PAGINAS, pareceePdf } from '../src/material/pdf.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(aqui, 'fixtures');
@@ -53,5 +53,13 @@ describe('extracao de PDF', () => {
   it('recusa PDF corrompido com mensagem util', async () => {
     const quebrado = new Uint8Array(Buffer.from('%PDF-1.4\nlixo que nao e um pdf de verdade'));
     await expect(extrairTextoDoPdf(quebrado)).rejects.toBeInstanceOf(ErroPdf);
+  });
+});
+
+describe('material grande', () => {
+  it('le apostila de faculdade sem cortar: o teto e alto', () => {
+    // 80 paginas cortava apostila comum ao meio. O limite que manda de verdade
+    // e o de caracteres, nao o de paginas.
+    expect(MAX_PAGINAS).toBeGreaterThanOrEqual(300);
   });
 });

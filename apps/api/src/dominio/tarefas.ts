@@ -28,7 +28,13 @@ export type Tarefa = {
   progresso: number;
   criadaEm: string;
   concluidaEm?: string;
-  resultado?: { materiaId: string; temaId: string | null; custoUSD: number };
+  resultado?: {
+    materiaId: string;
+    temaId: string | null;
+    custoUSD: number;
+    /** Recado para a tela: algo importante que o aluno precisa saber. */
+    aviso?: string;
+  };
   falha?: FalhaTarefa;
 };
 

@@ -8,6 +8,7 @@ import {
 import { extrairJSON, extrairObjetos } from '../src/ia/json.js';
 import { calcularCusto, somarCustos } from '../src/ia/modelo.js';
 import { QUESTOES_POR_TEMA, temasRestantes } from '@estudaai/shared';
+import { faixaDeTemas } from '../src/ia/gerar.js';
 
 describe('texto do material', () => {
   it('colapsa espacos e quebras', () => {
@@ -22,12 +23,32 @@ describe('texto do material', () => {
   });
 
   it('amostra o documento inteiro, nao so o comeco', () => {
-    // Cada bloco tem uma marca propria; a amostra tem que alcancar a ultima.
-    const blocos = Array.from({ length: 20 }, (_, i) => `MARCA${i} ` + 'z'.repeat(2000));
+    // Cada bloco comeca com a propria marca, entao da para ver de onde a
+    // amostra tirou pedaco. O teste antigo usava 20 blocos e conferia a marca
+    // 10 — que cabia no comeco e por isso passava mesmo com a amostra so
+    // varrendo o inicio. Uma apostila de verdade tem mais de 100 blocos.
+    const blocos = Array.from({ length: 140 }, (_, i) => `MARCA${i}: ` + 'z'.repeat(2400));
     const a = amostra(blocos, 11_000);
-    expect(a).toContain('MARCA0');
-    expect(a).toContain('MARCA10');
+
+    const vistas = [...a.matchAll(/MARCA(\d+):/g)].map((m) => Number(m[1]));
+    expect(vistas.length).toBeGreaterThan(8);
+    // O primeiro e o ultimo bloco entram sempre: o comeco costuma ter o sumario
+    // e o fim costuma ter o assunto que ninguem alcanca.
+    expect(vistas).toContain(0);
+    expect(vistas).toContain(139);
+    // E o meio nao pode ser um buraco.
+    expect(vistas.some((v) => v > 50 && v < 90)).toBe(true);
     expect(a.length).toBeLessThanOrEqual(11_000);
+  });
+
+  it('material pequeno entra inteiro na amostra', () => {
+    const blocos = ['primeiro bloco curto', 'segundo bloco curto', 'terceiro bloco curto'];
+    const a = amostra(blocos, 11_000);
+    for (const b of blocos) expect(a).toContain(b);
+  });
+
+  it('nao quebra com material vazio', () => {
+    expect(amostra([], 11_000)).toBe('');
   });
 
   it('acha o bloco que fala do tema, ignorando acento e caixa', () => {
@@ -108,5 +129,27 @@ describe('cota', () => {
 
   it('mantem o tema padrao em 20 questoes', () => {
     expect(QUESTOES_POR_TEMA).toBe(20);
+  });
+});
+
+describe('quantos temas pedir', () => {
+  const blocosCom = (caracteres: number) => fatiar('x'.repeat(caracteres));
+
+  it('resumo curto nao vira uma dezena de temas', () => {
+    expect(faixaDeTemas(blocosCom(8_000))).toEqual({ minimo: 4, maximo: 8 });
+  });
+
+  it('apostila grande ganha mais temas, nao um resumo forcado', () => {
+    // Com teto fixo de 6, o fim de um material de 150 paginas ficava sem tema.
+    expect(faixaDeTemas(blocosCom(150_000)).maximo).toBeGreaterThan(8);
+    expect(faixaDeTemas(blocosCom(400_000)).maximo).toBe(14);
+  });
+
+  it('o teto para de crescer: lista de 40 temas nao ajuda ninguem', () => {
+    expect(faixaDeTemas(blocosCom(2_000_000)).maximo).toBe(14);
+  });
+
+  it('material minusculo ainda pede pelo menos alguns temas', () => {
+    expect(faixaDeTemas(blocosCom(300)).minimo).toBe(4);
   });
 });

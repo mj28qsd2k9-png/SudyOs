@@ -11,7 +11,14 @@ import { normalizarMaterial } from './texto.js';
  */
 
 export const MAX_BYTES_PDF = 25 * 1024 * 1024;
-export const MAX_PAGINAS = 80;
+
+/**
+ * Apostila de faculdade passa de 80 paginas com facilidade, e ler mais paginas
+ * quase nao custa: a amostra do mapeamento e o trecho de cada tema tem teto
+ * proprio, entao o texto extra pesa so na extracao. Quem manda de verdade e o
+ * limite de caracteres, la em `texto.ts`.
+ */
+export const MAX_PAGINAS = 300;
 
 export class ErroPdf extends Error {
   constructor(

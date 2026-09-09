@@ -21,7 +21,12 @@ import { identificar } from './contexto.js';
  * texto ja extraido (o que o banco de testes e os scripts fazem). Os dois
  * desembocam no mesmo lugar.
  */
-type MaterialRecebido = { texto: string; nome?: string; paginas?: number };
+type MaterialRecebido = {
+  texto: string;
+  nome?: string;
+  paginas?: number;
+  paginasLidas?: number;
+};
 
 async function lerMaterial(req: FastifyRequest): Promise<MaterialRecebido> {
   if (req.isMultipart()) {
@@ -32,7 +37,8 @@ async function lerMaterial(req: FastifyRequest): Promise<MaterialRecebido> {
     return {
       texto: extraido.texto,
       nome: arquivo.filename?.replace(/\.pdf$/i, '').trim() || undefined,
-      paginas: extraido.paginasLidas,
+      paginas: extraido.paginas,
+      paginasLidas: extraido.paginasLidas,
     };
   }
 
@@ -161,6 +167,15 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
     }
 
     const blocos = fatiar(texto);
+
+    // Cortar em silencio e o pior dos mundos: o aluno acha que a materia
+    // inteira virou tema e nunca descobre que metade do livro ficou de fora.
+    const aviso =
+      recebido.paginas && recebido.paginasLidas && recebido.paginasLidas < recebido.paginas
+        ? `Li as primeiras ${recebido.paginasLidas} de ${recebido.paginas} páginas. ` +
+          'Para cobrir o resto, divida o PDF e suba as outras partes como matérias separadas.'
+        : undefined;
+
     const tarefa = fila.criar(usuarioId, 'Destrinchando o material...');
 
     fila.executar(
@@ -214,6 +229,7 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
           materiaId,
           temaId: primeiro.id,
           custoUSD: Number((mapa.custo.totalUSD + trilha.custo.totalUSD).toFixed(4)),
+          ...(aviso ? { aviso } : {}),
         };
       },
       (erro) => responderErro(reply, erro, 'gerar materia'),

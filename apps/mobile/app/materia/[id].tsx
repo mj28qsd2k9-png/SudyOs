@@ -12,7 +12,7 @@ import { retorno } from '../../src/ui/retorno';
 import { cores, espaco, raio, tamanho } from '../../src/ui/tema';
 
 export default function TelaMateria() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, aviso } = useLocalSearchParams<{ id: string; aviso?: string }>();
   const { pronto, perfil } = useEstado();
   const sessao = useSessao();
   const [materia, setMateria] = useState<Materia | null>(null);
@@ -77,6 +77,7 @@ export default function TelaMateria() {
         )}
 
         {erro && <Aviso texto={erro} />}
+        {aviso && <Aviso texto={aviso} tipo="info" />}
 
         {materia?.temas.map((tema, i) => {
           const pronto = temaFoiGerado(tema);

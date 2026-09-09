@@ -22,7 +22,7 @@ export const OutlineSchema = z.object({
           .describe('3 a 5 palavras-chave que localizam este tema no material'),
       }),
     )
-    .describe('De 4 a 6 temas cobrindo o documento inteiro, na ordem do material'),
+    .describe('Temas cobrindo o documento inteiro, na ordem do material'),
 });
 export type OutlineBruto = z.infer<typeof OutlineSchema>;
 
