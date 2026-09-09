@@ -137,17 +137,32 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
       return reply.sendFile('index.html', buildDoApp);
     });
   } else {
+    // Sem build, a raiz explica o que fazer — e a explicacao muda conforme o
+    // modo, porque "rode npm start" para quem ESTA rodando npm run dev e um
+    // conselho que nao faz sentido e faz a pessoa duvidar do que ela fez.
+    const emDesenvolvimento = process.env['MODO_DEV'] === '1';
+    const pagina = emDesenvolvimento
+      ? `<h1 style="color:#E8501A">Você está em modo de desenvolvimento</h1>
+         <p>Neste modo o app roda noutra porta, com recarga automática.
+         Abra <a href="http://localhost:8081" style="color:#E8501A"><b>http://localhost:8081</b></a>
+         — e, se não abrir, rode <code style="background:#FDEEE1;padding:2px 6px;border-radius:6px">npm run web</code>
+         num segundo terminal.</p>
+         <p style="color:#9B8579;font-size:14px">Para usar o app num endereço só,
+         encerre este terminal com <b>Ctrl+C</b> e rode
+         <code style="background:#FDEEE1;padding:2px 6px;border-radius:6px">npm start</code>.</p>`
+      : `<h1 style="color:#E8501A">O app ainda não foi montado</h1>
+         <p>Encerre este terminal com <b>Ctrl+C</b> e rode
+         <code style="background:#FDEEE1;padding:2px 6px;border-radius:6px">npm start</code>
+         na raiz do projeto: ele monta o app e serve tudo neste mesmo endereço.</p>
+         <p style="color:#9B8579;font-size:14px">Se o <code>npm start</code> falhar ao montar,
+         rode <code style="background:#FDEEE1;padding:2px 6px;border-radius:6px">npm run diagnosticar</code>
+         para ver a causa.</p>`;
+
     app.get('/', async (_req, reply) =>
       reply.type('text/html').send(
-        `<!doctype html><meta charset="utf-8">
-         <title>Estuda AI</title>
-         <body style="font:16px/1.6 system-ui;max-width:34rem;margin:12vh auto;padding:0 1.5rem;color:#4A3B32;background:#FFF9F4">
-         <h1 style="color:#E8501A">O app ainda nao foi montado</h1>
-         <p>Rode <code style="background:#FDEEE1;padding:2px 6px;border-radius:6px">npm start</code>
-         na raiz do projeto: ele monta o app e sobe tudo junto neste mesmo endereco.</p>
-         <p style="color:#9B8579;font-size:14px">Para desenvolver com recarga automatica,
-         use <code>npm run dev</code> e <code>npm run web</code> em dois terminais.</p>
-         </body>`,
+        `<!doctype html><meta charset="utf-8"><title>Estuda AI</title>
+         <body style="font:16px/1.6 system-ui;max-width:36rem;margin:12vh auto;padding:0 1.5rem;color:#4A3B32;background:#FFF9F4">
+         ${pagina}</body>`,
       ),
     );
   }
