@@ -43,7 +43,11 @@ const ambiente = [
 console.log('\n=== AMBIENTE ===\n' + ambiente + '\n');
 console.log('=== MONTANDO O APP (pode demorar ~1 min) ===\n');
 
-const proc = spawn('npm', ['run', 'build:app', '--workspace', '@estudaai/mobile'], {
+// Chama o script da RAIZ, que compila o pacote compartilhado antes. Chamar o
+// do mobile direto falha com "nao achei @estudaai/shared/dist/index.js" — um
+// erro que aponta para o import e nao para a causa, e que faria esta ferramenta
+// de diagnostico dar diagnostico falso.
+const proc = spawn('npm', ['run', 'build:app'], {
   cwd: raiz,
   shell: false,
 });
