@@ -123,6 +123,30 @@ describe('normalizarQuestao — o que deve ser descartado', () => {
     ['sem explicacao', { tipo: 'mc', pergunta: 'Q', opcoes: ['a', 'b'], correta: 0, explicacao: '' }],
     ['tf sem resposta booleana', { tipo: 'tf', pergunta: 'Q', resposta: 'talvez', explicacao }],
     ['fill sem texto ao redor', { tipo: 'fill', antes: ' ', depois: '', opcoes: ['a', 'b'], correta: 0, explicacao }],
+    [
+      // Visto numa apostila de ESG de verdade: a frase completa ficava
+      // "...social and governance governance" e a questao se respondia sozinha.
+      'fill com a resposta escrita depois da lacuna',
+      {
+        tipo: 'fill',
+        antes: 'ESG significa environmental, social and ',
+        depois: ' governance, ou seja, ambiental, social e governanca.',
+        opcoes: ['governance', 'growth', 'government'],
+        correta: 0,
+        explicacao,
+      },
+    ],
+    [
+      'fill com a resposta escrita antes da lacuna',
+      {
+        tipo: 'fill',
+        antes: 'A mitocondria produz energia. A ',
+        depois: ' e a usina da celula.',
+        opcoes: ['mitocondria', 'membrana'],
+        correta: 0,
+        explicacao,
+      },
+    ],
     ['match com um par so', { tipo: 'match', pares: [['a', 'b']], explicacao }],
     ['ordenar com item repetido', { tipo: 'ordenar', instrucao: 'Ordene:', ordem_correta: ['a', 'a'], explicacao }],
     ['ordenar sem instrucao', { tipo: 'ordenar', instrucao: '', ordem_correta: ['a', 'b'], explicacao }],
@@ -133,6 +157,39 @@ describe('normalizarQuestao — o que deve ser descartado', () => {
 
   it.each(casos)('descarta: %s', (_nome, bruta) => {
     expect(normalizarQuestao(bruta, 'prova')).toBeNull();
+  });
+
+  it('nao recusa fill por repetir palavra curta ao redor da lacuna', () => {
+    // "de" aparecer duas vezes numa frase e normal; recusar por isso jogaria
+    // fora exercicio bom.
+    const q = normalizarQuestao(
+      {
+        tipo: 'fill',
+        antes: 'O nucleo guarda o material genetico de ',
+        depois: ' de cada celula.',
+        opcoes: ['DNA', 'RNA'],
+        correta: 0,
+        explicacao,
+      },
+      'fixacao',
+    );
+    expect(q).not.toBeNull();
+  });
+
+  it('aceita fill quando a palavra so aparece dentro de outra', () => {
+    // "governanca" contem "governa", mas nao entrega a resposta.
+    const q = normalizarQuestao(
+      {
+        tipo: 'fill',
+        antes: 'A ',
+        depois: ' corporativa orienta conselheiros e diretores.',
+        opcoes: ['governanca', 'governo'],
+        correta: 0,
+        explicacao,
+      },
+      'fixacao',
+    );
+    expect(q).not.toBeNull();
   });
 
   it('aceita indice vindo como string numerica', () => {

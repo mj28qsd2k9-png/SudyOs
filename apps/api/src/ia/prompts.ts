@@ -104,7 +104,10 @@ export function tarefaFixacao(tema: string, quantas: number, evitar?: string): s
     '',
     'Regras por tipo:',
     '- fill: a lacuna fica ENTRE os campos antes e depois; as 3 opcoes precisam ser ' +
-      'do mesmo tipo de coisa (nao misture um termo com uma frase inteira).',
+      'do mesmo tipo de coisa (nao misture um termo com uma frase inteira). A ' +
+      'palavra da resposta NAO pode aparecer em antes nem em depois — se ela ja ' +
+      'estiver escrita na frase, a questao se responde sozinha e o texto fica ' +
+      'repetido. Leia a frase montada antes de entregar.',
     '- match: 3 pares, cada definicao com no maximo 8 palavras.',
     '- ordenar: use uma sequencia que exista de verdade no conteudo (etapas de um ' +
       'processo, ordem de grandeza, linha do tempo), com itens que nao se repetem.',

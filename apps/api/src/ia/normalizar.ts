@@ -59,6 +59,30 @@ function pares(valor: unknown): [string, string][] {
   return saida;
 }
 
+/**
+ * `true` quando a palavra da resposta ja aparece no texto ao redor da lacuna.
+ *
+ * So vale para palavras com algum corpo: numa frase e normal repetir "de" ou
+ * "da", e recusar por isso jogaria fora exercicio bom.
+ */
+function respostaVazada(resposta: string, antes: string, depois: string): boolean {
+  const alvo = semAcentoMinusculo(resposta);
+  if (alvo.length < 4) return false;
+  const redor = `${semAcentoMinusculo(antes)} ${semAcentoMinusculo(depois)}`;
+  return new RegExp(`(^|[^a-z0-9])${escaparRegex(alvo)}([^a-z0-9]|$)`).test(redor);
+}
+
+function semAcentoMinusculo(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function escaparRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function normalizarQuestao(bruta: unknown, familia: FamiliaQuestao): Questao | null {
   if (!bruta || typeof bruta !== 'object') return null;
   const q = bruta as Record<string, unknown>;
@@ -100,6 +124,11 @@ export function normalizarQuestao(bruta: unknown, familia: FamiliaQuestao): Ques
     const depois = String(q['depois'] ?? '');
     // Lacuna sem nenhum texto ao redor nao da para ler na tela.
     if (!antes.trim() && !depois.trim()) return null;
+    // A resposta escrita na propria frase entrega a questao e ainda deixa a
+    // frase errada: "ESG significa environmental, social and ___ governance"
+    // com resposta "governance" completa para "...and governance governance".
+    // Visto numa apostila de verdade em 09/09/2026.
+    if (respostaVazada(opcoes[correta]!, antes, depois)) return null;
     candidata = { ...comum, tipo, antes, depois, opcoes, correta };
   } else if (tipo === 'match') {
     const p = pares(q['pares']);
