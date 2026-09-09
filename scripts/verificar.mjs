@@ -104,10 +104,20 @@ const livre = await new Promise((resolve) => {
 if (livre) {
   ok(`porta ${porta} livre`);
 } else {
+  // Quase sempre e o proprio projeto rodando noutro terminal: `npm start` e
+  // `npm run dev` querem a mesma porta e nao convivem.
+  const matar =
+    process.platform === 'win32'
+      ? `netstat -ano | findstr :${porta}`
+      : `lsof -ti tcp:${porta} | xargs kill`;
   falha(
     `porta ${porta} ja esta em uso`,
-    `Ou o backend ja esta rodando noutro terminal, ou outro programa ocupou a porta. ` +
-      `Feche o outro, ou rode com outra porta: PORT=3334 npm run dev`,
+    `Provavelmente o proprio projeto rodando noutro terminal — \`npm start\` e ` +
+      `\`npm run dev\` disputam esta porta e nao podem rodar juntos.
+` +
+      `    Va ao outro terminal e tecle Ctrl+C, ou derrube pela porta: ${matar}
+` +
+      `    (Se preferir subir noutra porta: PORT=3334 npm start)`,
   );
 }
 

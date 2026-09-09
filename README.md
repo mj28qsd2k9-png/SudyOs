@@ -61,17 +61,23 @@ no mesmo lugar. Se faltar alguma coisa (Node antigo, chave em branco, porta
 ocupada), ele diz o que é e o comando que resolve, em vez de um código de erro.
 Para conferir sem subir nada: `npm run verificar`.
 
+> **Um modo de cada vez.** `npm start` e `npm run dev` disputam a porta 3333 e
+> não convivem. Antes de trocar de modo, encerre o outro com `Ctrl+C` no
+> terminal dele (ou `lsof -ti tcp:3333 | xargs kill`).
+
 ### Para desenvolver
 
 `npm start` monta o app uma vez; alterar o código do app exige rodar de novo.
-Com recarga automática são dois terminais:
+Com recarga automática são dois terminais — e aí **não** se usa o `npm start`:
 
 ```bash
 npm run dev      # backend  → http://localhost:3333
 npm run web      # o app    → http://localhost:8081
 ```
 
-Nesse modo o app é servido pelo Expo na 8081 e fala com a API na 3333.
+Nesse modo o app é servido pelo Expo na 8081 e fala com a API na 3333. As duas
+portas são diferentes, então esses dois convivem — o que não convive é `npm
+start` com qualquer um deles.
 
 ### No celular, na mesma Wi-Fi
 
