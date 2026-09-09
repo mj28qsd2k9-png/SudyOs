@@ -6,7 +6,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "apps/api"
+    "apps/api",
+    "apps/mobile"
   ],
   "engines": {
     "node": ">=20.11"
@@ -15,6 +16,7 @@
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspace @estudaai/api",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "mobile": "npm run start --workspace @estudaai/mobile"
   }
 }

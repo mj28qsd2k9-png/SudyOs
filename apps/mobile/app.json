@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Estuda AI",
+    "slug": "estuda-ai",
+    "scheme": "estudaai",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FFF9F4",
+    "splash": {
+      "backgroundColor": "#FFF9F4",
+      "resizeMode": "contain"
+    },
+    "plugins": ["expo-router"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.estudaai.app"
+    },
+    "android": {
+      "package": "com.estudaai.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E8501A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "extra": {
+      "apiUrl": "http://localhost:3333"
+    }
+  }
+}

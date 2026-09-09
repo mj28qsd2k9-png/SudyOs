@@ -16,9 +16,12 @@ UX e de lógica. Ele não é código de produção.
 npm install
 npm run build --workspace @estudaai/shared   # o app/api importam o dist
 npm run dev          # API em http://localhost:3333, banco de testes em /teste/
+npm run mobile       # o app (Expo)
 npm test             # vitest, nenhum teste toca a rede
 npm run typecheck
 ```
+
+O `.env` da raiz e lido pelo `--env-file-if-exists` do Node, sem dotenv.
 
 ## Convenções
 

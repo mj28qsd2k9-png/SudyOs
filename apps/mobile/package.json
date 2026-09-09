@@ -1,0 +1,36 @@
+{
+  "name": "@estudaai/mobile",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "expo": "~57.0.21",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "@estudaai/shared": "*",
+    "expo-router": "~57.0.20",
+    "expo-document-picker": "~57.0.1",
+    "expo-linking": "~57.0.9",
+    "expo-constants": "~57.0.17",
+    "react-native-safe-area-context": "~5.9.1",
+    "react-native-screens": "~4.27.0",
+    "react-native-gesture-handler": "~3.2.1",
+    "react-dom": "19.2.3",
+    "react-native-web": "~0.21.2",
+    "@react-native-async-storage/async-storage": "~3.1.1",
+    "expo-haptics": "~57.0.2",
+    "react-native-svg": "~15.15.5"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "private": true
+}

@@ -4,56 +4,67 @@ A ordem é a do handoff (§4 e §5), com o estado de cada item.
 
 ## Feito
 
-**1. Backend de geração.** Guarda a chave da Anthropic, chama a API server-side,
-aplica a cota do plano e usa prompt caching do material. Mapeia o PDF em temas e
-gera aula + 20 questões por tema, nos 7 tipos, nas duas famílias.
+**1. Backend de geração.** Guarda a chave da Anthropic, chama a API
+server-side, aplica a cota do plano e usa prompt caching do material. Mapeia o
+PDF em temas e gera aula + 20 questões por tema, nos 7 tipos, nas duas
+famílias. A geração roda como **tarefa em segundo plano**: a rota responde na
+hora e o app acompanha o progresso, então a conexão pode cair sem perder o
+trabalho.
 
-**3a. Ofensiva server-authoritative.** A data vem do relógio do servidor no fuso
-do aluno; a correção das respostas também é do servidor. Congelamentos, marcos e
-casos de borda com teste.
+**3a. Ofensiva server-authoritative.** A data vem do relógio do servidor no
+fuso do aluno; a correção das respostas também é do servidor. Congelamentos,
+marcos e casos de borda com teste.
 
-**4. Processamento de PDF.** Extração no cliente com pdf.js; o backend recebe
-texto. O banco de testes em `/teste/` exercita esse caminho.
+**3b. Banco.** SQLite pelo módulo nativo do Node, sem dependência. Usuários,
+matérias, temas, questões, ofensiva, cota e progresso sobrevivem ao restart.
+
+**4. Processamento de PDF.** Extração **no servidor** (`unpdf`), porque React
+Native não roda pdf.js. O app manda o arquivo em multipart.
+
+**O app.** React Native + Expo, com as telas do protótipo portadas:
+onboarding, home, nova matéria, geração com progresso, matéria, aula com
+anotações, os 7 tipos de exercício, conclusão com comemoração de ofensiva,
+tela de ofensiva, missões, notas e perfil.
 
 ## Próximo
 
-**App em React Native + Expo.** Portar as telas do protótipo (onboarding, home,
-matéria, aula com marca-texto, os 7 tipos de exercício, tela de ofensiva,
-missões, perfil, notas) contra a API que já existe. O `packages/shared` já
-entrega os tipos e as regras prontos para o app.
+**Autenticação.** É o que falta para o app deixar de ser por aparelho. Hoje o
+id do usuário é gerado na primeira abertura e guardado no aparelho; trocar de
+celular perde tudo. Dois pontos encostam nisso e só eles:
+`apps/api/src/rotas/contexto.ts` e `apps/mobile/src/api/cliente.ts`.
 
-Duas coisas a resolver junto:
+**Anotações no servidor.** O app guarda grifos e notas em `AsyncStorage`. A
+tabela está desenhada em `ARQUITETURA.md`; falta o endpoint.
 
-- **Geração como job.** Um tema são 5 chamadas de IA e a requisição segura por
-  30–60s. Para o app, `POST` devolve um id e o cliente acompanha o status —
-  assim a tela de "destrinchando o material" tem progresso de verdade e a
-  conexão não precisa ficar de pé.
-- **Aula e questões em duas etapas.** A aula sai na primeira chamada; dá para
-  liberar a leitura enquanto os exercícios ainda estão sendo gerados.
+**Marca-texto na aula.** O protótipo deixava grifar um trecho selecionado. O
+app hoje só permite escrever notas — seleção de texto em React Native precisa
+de tratamento próprio e ficou para depois.
 
 ## Depois
 
-**2 + 3b. Autenticação e banco.** Trocar `RepositorioMemoria` por Postgres (o
-modelo está em `ARQUITETURA.md`) e o cabeçalho `x-usuario-id` por token de
-verdade. São os dois pontos já isolados de propósito.
+**Revisão espaçada.** A conclusão já devolve as tags dos conceitos errados, e o
+app já as mostra em "Vale revisar". Falta guardar (`ErroConceito`) e ressurgir
+com o tempo.
 
-**6. Revisão espaçada.** A conclusão de tema já devolve as tags dos conceitos
-errados. Falta guardar (`ErroConceito`) e ressurgir com o tempo — uma trilha de
-revisão montada com as questões dos conceitos vencidos.
+**Notificações push.** Lembrete de ofensiva pelo Expo Notifications. É o
+ingrediente que traz a pessoa de volta.
 
-**5. Notificações push.** Lembrete de ofensiva pelo Expo Notifications. É o
-ingrediente que traz a pessoa de volta; depende do app nativo estar de pé.
+**Som.** O protótipo sintetizava com Web Audio, que não existe em React Native.
+O app entrega vibração; som precisa de arquivos de áudio.
 
-**7. Assinatura.** A cota já é aplicada no servidor e o plano `basico` já vale
-80 questões/mês; falta o gateway e mudar o plano do usuário depois do pagamento.
+**Assinatura.** A cota já é aplicada no servidor e o plano `basico` já vale 80
+questões/mês; falta o gateway e mudar o plano depois do pagamento.
 
-**8. Animação de personagem.** Assets Rive ou Lottie. Não sai por código.
+**Postgres.** SQLite resolve local e self-host. Um deploy com várias instâncias
+pede Postgres — é outra classe implementando `Repositorio`.
 
-## Ideias que o código já deixou prontas para depois
+**Animação de personagem.** Assets Rive ou Lottie. Não sai por código.
+
+## Ideias que o código já deixou prontas
 
 - **Batch API (−50%)** para gerar em lote os temas que o aluno não vai jogar
   agora.
 - **`MODELO_IA`** por variável de ambiente: dá para rodar um A/B de qualidade
   entre Haiku 4.5 e Sonnet 5 sem tocar no código.
 - **`custoUSD` em toda geração**: a margem por assinante é observável desde o
-  primeiro dia, não estimada.
+  primeiro dia.

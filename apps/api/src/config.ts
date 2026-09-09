@@ -15,6 +15,8 @@ const Ambiente = z.object({
   QUESTOES_POR_TEMA: z.coerce.number().int().min(4).max(40).default(QUESTOES_POR_TEMA),
   /** Origens liberadas no CORS. Vazio = libera tudo (so faz sentido em dev). */
   CORS_ORIGENS: z.string().default(''),
+  /** Arquivo do banco. `:memory:` some no restart e so serve para teste. */
+  BANCO: z.string().default('./dados/estudaai.db'),
 });
 
 export type Config = {
@@ -25,6 +27,7 @@ export type Config = {
   modelo: ModeloId;
   questoesPorTema: number;
   corsOrigens: string[];
+  banco: string;
 };
 
 export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -37,5 +40,8 @@ export function carregarConfig(env: NodeJS.ProcessEnv = process.env): Config {
     modelo: bruto.MODELO_IA as ModeloId,
     questoesPorTema: bruto.QUESTOES_POR_TEMA,
     corsOrigens: bruto.CORS_ORIGENS.split(',').map((s) => s.trim()).filter(Boolean),
+    // Em teste o banco e descartavel por padrao: teste que deixa arquivo para
+    // tras contamina a proxima rodada.
+    banco: bruto.NODE_ENV === 'test' ? ':memory:' : bruto.BANCO,
   };
 }

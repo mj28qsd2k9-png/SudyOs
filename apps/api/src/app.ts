@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { Config } from './config.js';
 import { criarGerador, type GeradorIA } from './ia/cliente.js';
-import { RepositorioMemoria, type Repositorio } from './infra/repositorio.js';
+import type { Repositorio } from './infra/repositorio.js';
+import { RepositorioSqlite } from './infra/repositorioSqlite.js';
 import { rotasMaterias } from './rotas/materias.js';
 import { rotasProgresso } from './rotas/progresso.js';
 import { MAX_BYTES_PDF } from './material/pdf.js';
@@ -37,7 +38,7 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
     origin: config.corsOrigens.length > 0 ? config.corsOrigens : true,
   });
 
-  const repo = opcoes.repo ?? new RepositorioMemoria();
+  const repo = opcoes.repo ?? new RepositorioSqlite(config.banco);
   const fila = new FilaTarefas();
   const gerador =
     opcoes.gerador ??

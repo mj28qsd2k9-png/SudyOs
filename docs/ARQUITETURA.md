@@ -182,14 +182,27 @@ o número cheio até o dia virar.
 A resposta da conclusão já devolve as **tags dos conceitos errados** — é o
 insumo da revisão espaçada, que ainda não foi construída.
 
-## Persistência: o que existe e o que vem
+## Persistência
 
-Hoje o `RepositorioMemoria` some quando o processo reinicia. Ele existe para o
-backend de geração poder ser exercitado de ponta a ponta antes do banco. Trocar
-significa escrever outra classe que implemente `Repositorio`, sem tocar nas
-rotas.
+**SQLite, pelo módulo nativo do Node** (`node:sqlite`) — zero dependências.
+O arquivo fica em `dados/estudaai.db` e o caminho é configurável por `BANCO`.
 
-O modelo relacional correspondente, para quando o Postgres entrar:
+O repositório em memória existiu para exercitar a geração antes do banco, e a
+troca não foi planejamento: foi um teste do app que morreu porque o servidor
+reiniciou e levou junto uma matéria que custou US$ 0,11 para gerar. Um app que
+perde o material do aluno num restart não é um app.
+
+A matéria é guardada como JSON numa coluna, validada pelo mesmo contrato Zod na
+leitura. Normalizar temas e questões em tabelas só paga a pena quando houver
+consulta por questão — o que chega junto com a revisão espaçada, não antes.
+
+`node:sqlite` é marcado como experimental pelo Node e imprime um aviso na
+subida. A API que usamos (`DatabaseSync`, `prepare`, `run`, `get`, `all`) é
+estável na prática, e o custo de trocar por outro driver é um arquivo.
+
+Trocar por Postgres no deploy é escrever outra classe que implemente
+`Repositorio`, sem tocar nas rotas. O modelo relacional correspondente, para
+quando isso acontecer:
 
 ```prisma
 model Usuario {
@@ -294,7 +307,11 @@ model Anotacao {
 - **Identidade.** `apps/api/src/rotas/contexto.ts` lê o usuário de um cabeçalho,
   sem verificar nada. Todo o resto do código já trata o id como confiável, então
   ligar a autenticação de verdade é mudar só esse arquivo.
-- **Geração síncrona.** Um tema são 5 chamadas de IA; a requisição segura por
-  30–60s. Funciona, mas para o app é melhor virar job com status — está no
-  roadmap.
-- **Persistência em memória.** Já explicado acima.
+- **Som.** O protótipo sintetizava som com Web Audio; React Native não tem
+  equivalente e som exigiria arquivos de áudio, que ainda não existem. O app
+  entrega vibração (`expo-haptics`), que no celular é o retorno que mais se
+  sente.
+- **Autenticação.** Já dito acima: o id vem de um cabeçalho, sem verificação.
+- **Anotações.** O app guarda grifos e notas no aparelho (`AsyncStorage`); o
+  backend ainda não tem endpoint para elas. Trocar de celular perde as
+  anotações.
