@@ -6,7 +6,11 @@ dist/
 .DS_Store
 coverage/
 *.tsbuildinfo
-dados/
+# Ancorado com barra na frente DE PROPOSITO. Sem ela, `dados/` casa com
+# qualquer pasta chamada dados em qualquer profundidade — e engoliu
+# `apps/mobile/src/dados/`, que e codigo do app, nao banco. O clone ficava sem
+# dois arquivos e o app nao montava em maquina nenhuma alem da minha.
+/apps/api/dados/
 *.db
 *.db-wal
 *.db-shm
