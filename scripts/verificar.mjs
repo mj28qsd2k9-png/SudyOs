@@ -111,6 +111,32 @@ if (livre) {
   );
 }
 
+// 5) macOS: limite de arquivos abertos. O Metro abre muito arquivo de uma vez,
+// e o padrao do Mac (256) e baixo demais — a build morre com EMFILE, que nao
+// diz "aumente o ulimit".
+if (process.platform === 'darwin') {
+  const limite = Number(process.env.__LIMITE_ARQUIVOS ?? 0) || lerUlimit();
+  if (limite && limite < 4096) {
+    aviso(
+      `limite de arquivos abertos baixo (${limite})`,
+      'Se a montagem do app falhar, rode `ulimit -n 8192` neste terminal e tente ' +
+        'de novo. Instalar o watchman (`brew install watchman`) resolve de vez.',
+    );
+  } else {
+    ok('limite de arquivos abertos suficiente');
+  }
+}
+
+function lerUlimit() {
+  try {
+    // `ulimit` e embutido do shell, entao precisa de um shell para responder.
+    const { execFileSync } = require('node:child_process');
+    return Number(execFileSync('/bin/sh', ['-c', 'ulimit -n'], { encoding: 'utf8' }).trim());
+  } catch {
+    return 0;
+  }
+}
+
 // Relatorio.
 if (avisos.length) {
   console.log('\nAtencao:');
