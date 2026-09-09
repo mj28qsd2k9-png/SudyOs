@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEstado } from '../src/dados/estado';
+import { useEstado, useSessao } from '../src/dados/estado';
 import { api, ErroApi } from '../src/api/cliente';
 import { Aviso, Botao, Subtitulo, Titulo } from '../src/ui/componentes';
 import { Pdf } from '../src/ui/icones';
@@ -12,7 +12,8 @@ import { retorno } from '../src/ui/retorno';
 import { cores, espaco, raio, tamanho } from '../src/ui/tema';
 
 export default function NovaMateria() {
-  const { sessao, perfil } = useEstado();
+  const { perfil } = useEstado();
+  const sessao = useSessao();
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const router = useRouter();

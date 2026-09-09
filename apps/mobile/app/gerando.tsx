@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useEstado } from '../src/dados/estado';
+import { useEstado, useSessao } from '../src/dados/estado';
 import { acompanharTarefa } from '../src/api/cliente';
 import { Aviso, Barra, Botao } from '../src/ui/componentes';
 import { Livro } from '../src/ui/icones';
@@ -18,7 +18,8 @@ import { cores, espaco, raio, tamanho } from '../src/ui/tema';
  */
 export default function Gerando() {
   const { tarefaId, materiaId } = useLocalSearchParams<{ tarefaId: string; materiaId?: string }>();
-  const { sessao, recarregar } = useEstado();
+  const { recarregar } = useEstado();
+  const sessao = useSessao();
   const [etapa, setEtapa] = useState('Preparando…');
   const [progresso, setProgresso] = useState(0.05);
   const [falha, setFalha] = useState<{ mensagem: string; podeTentar: boolean } | null>(null);

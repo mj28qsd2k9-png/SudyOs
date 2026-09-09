@@ -4,8 +4,8 @@ import type { Materia } from '@estudaai/shared';
 /**
  * Cliente da API.
  *
- * A identificacao ainda e por cabecalho, igual ao backend: quando a
- * autenticacao entrar, e aqui e no `contexto.ts` do servidor que ela encosta.
+ * A identidade vai no `Authorization: Bearer`. O token e opaco: o app nao le
+ * nada de dentro dele, so o carrega — quem sabe de quem e a sessao e o servidor.
  */
 
 const BASE: string =
@@ -23,11 +23,25 @@ export class ErroApi extends Error {
   }
 }
 
-export type Sessao = { usuarioId: string; fuso: string };
+export type Sessao = { token: string; fuso: string };
 
 function cabecalhos(sessao: Sessao, extras: Record<string, string> = {}) {
-  return { 'x-usuario-id': sessao.usuarioId, 'x-fuso': sessao.fuso, ...extras };
+  return { authorization: `Bearer ${sessao.token}`, 'x-fuso': sessao.fuso, ...extras };
 }
+
+/** `true` quando o servidor disse que a sessao acabou e o app precisa relogar. */
+export function ehSessaoMorta(erro: unknown): boolean {
+  return erro instanceof ErroApi && erro.status === 401;
+}
+
+export type Credenciais = { email: string; senha: string };
+
+export type RespostaSessao = {
+  token: string;
+  expiraEm: string;
+  email: string;
+  materiasTrazidas?: number;
+};
 
 async function ler<T>(resposta: Response): Promise<T> {
   const corpo = await resposta.json().catch(() => ({}) as Record<string, unknown>);
@@ -95,6 +109,42 @@ export const api = {
 
   async saude(): Promise<{ ok: boolean; modelo: string; chaveConfigurada: boolean }> {
     return ler(await fetch(`${BASE}/saude`));
+  },
+
+  async cadastrar(
+    credenciais: Credenciais,
+    fuso: string,
+    aparelho?: string,
+  ): Promise<RespostaSessao> {
+    return ler(
+      await fetch(`${BASE}/auth/cadastrar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-fuso': fuso },
+        body: JSON.stringify({ ...credenciais, ...(aparelho ? { aparelho } : {}) }),
+      }),
+    );
+  },
+
+  async entrar(credenciais: Credenciais, fuso: string): Promise<RespostaSessao> {
+    return ler(
+      await fetch(`${BASE}/auth/entrar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-fuso': fuso },
+        body: JSON.stringify(credenciais),
+      }),
+    );
+  },
+
+  async sair(sessao: Sessao): Promise<void> {
+    // Falhar aqui nao pode impedir o logout local: o token some do aparelho de
+    // qualquer jeito, e o servidor o expira sozinho depois.
+    await fetch(`${BASE}/auth/sair`, { method: 'POST', headers: cabecalhos(sessao) }).catch(
+      () => undefined,
+    );
+  },
+
+  async eu(sessao: Sessao): Promise<{ usuarioId: string; email: string; criadaEm: string }> {
+    return ler(await fetch(`${BASE}/auth/eu`, { headers: cabecalhos(sessao) }));
   },
 
   async perfil(sessao: Sessao): Promise<Perfil> {

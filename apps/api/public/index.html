@@ -34,17 +34,25 @@
 <main>
   <h1>Estuda AI — banco de testes da API</h1>
   <p class="aviso">
-    Ferramenta de desenvolvimento, não o app. Ela extrai o texto do PDF no navegador
+    Ferramenta de desenvolvimento, não o app. Crie uma conta de teste para começar. Ela extrai o texto do PDF no navegador
     (pdf.js, igual ao protótipo) e exercita o backend de ponta a ponta: mapear temas,
     gerar aula + questões e concluir um tema. As respostas certas aparecem à vista de
     propósito — o objetivo aqui é inspecionar o que a IA produziu.
   </p>
 
-  <div class="linha">
-    <label>Usuário: <input type="text" id="usuario" value="usuario-zero" size="14"></label>
+  <div class="linha" id="areaLogin">
+    <input type="text" id="email" placeholder="voce@email.com" size="20">
+    <input type="password" id="senha" placeholder="senha (8+)" size="14">
+    <button id="btEntrar">Entrar</button>
+    <button class="sec" id="btCadastrar">Criar conta</button>
+    <button class="sec" id="btSaude">Saúde da API</button>
+  </div>
+
+  <div class="linha" id="areaSessao" style="display:none">
+    <span class="meta" id="quem"></span>
     <button class="sec" id="btCarregar">Carregar matérias</button>
     <button class="sec" id="btPerfil">Ver perfil</button>
-    <button class="sec" id="btSaude">Saúde da API</button>
+    <button class="sec" id="btSair">Sair</button>
   </div>
 
   <div class="linha">
@@ -59,6 +67,57 @@
 
 <script type="module">
 const $ = (id) => document.getElementById(id);
+const saida = $('saida');
+const estado = {
+  materia: null,
+  token: localStorage.getItem('teste:token'),
+  email: localStorage.getItem('teste:email'),
+};
+
+// A API exige sessão; este banco de testes passa pelo mesmo login do app.
+const cabecalhos = (extras = {}) => ({
+  'x-fuso': Intl.DateTimeFormat().resolvedOptions().timeZone,
+  ...(estado.token ? { authorization: `Bearer ${estado.token}` } : {}),
+  ...extras,
+});
+
+function pintarSessao() {
+  const logado = Boolean(estado.token);
+  $('areaLogin').style.display = logado ? 'none' : '';
+  $('areaSessao').style.display = logado ? '' : 'none';
+  $('quem').textContent = logado ? `Sessão: ${estado.email ?? '—'}` : '';
+  $('btSubir').disabled = !logado || !$('arquivo').files.length;
+}
+
+function guardarSessao(corpo) {
+  estado.token = corpo.token;
+  estado.email = corpo.email;
+  localStorage.setItem('teste:token', corpo.token);
+  localStorage.setItem('teste:email', corpo.email);
+  pintarSessao();
+}
+
+async function autenticar(caminho) {
+  saida.innerHTML = '';
+  try {
+    const r = await fetch(caminho, {
+      method: 'POST',
+      headers: cabecalhos({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ email: $('email').value.trim(), senha: $('senha').value }),
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(corpo.erro || `${r.status} ${r.statusText}`);
+    guardarSessao(corpo);
+    status(
+      corpo.materiasTrazidas
+        ? `Conta criada. ${corpo.materiasTrazidas} matéria(s) trazida(s).`
+        : 'Sessão aberta.',
+      0,
+    );
+  } catch (e) {
+    erro(e.message);
+  }
+}
 
 function status(texto, pct) {
   $('status').textContent = texto;
@@ -70,7 +129,16 @@ function erro(msg) {
 }
 
 async function api(caminho, opcoes = {}) {
-  const r = await fetch(caminho, { ...opcoes, headers: cabecalhos() });
+  const r = await fetch(caminho, {
+    ...opcoes,
+    headers: cabecalhos({ 'Content-Type': 'application/json' }),
+  });
+  if (r.status === 401) {
+    estado.token = null;
+    localStorage.removeItem('teste:token');
+    pintarSessao();
+    throw new Error('Sessão expirou. Entre de novo.');
+  }
   const corpo = await r.json().catch(() => ({}));
   if (!r.ok && r.status !== 207) {
     throw new Error(corpo.erro || `${r.status} ${r.statusText}`);
@@ -78,9 +146,20 @@ async function api(caminho, opcoes = {}) {
   return corpo;
 }
 
-$('arquivo').addEventListener('change', (e) => {
-  $('btSubir').disabled = !e.target.files.length;
+$('arquivo').addEventListener('change', () => pintarSessao());
+$('btEntrar').addEventListener('click', () => autenticar('/auth/entrar'));
+$('btCadastrar').addEventListener('click', () => autenticar('/auth/cadastrar'));
+$('btSair').addEventListener('click', async () => {
+  await fetch('/auth/sair', { method: 'POST', headers: cabecalhos() }).catch(() => {});
+  estado.token = null;
+  estado.email = null;
+  localStorage.removeItem('teste:token');
+  localStorage.removeItem('teste:email');
+  saida.innerHTML = '';
+  pintarSessao();
+  status('Sessão encerrada.', 0);
 });
+pintarSessao();
 
 $('btSaude').addEventListener('click', async () => {
   saida.innerHTML = `<pre>${JSON.stringify(await api('/saude'), null, 2)}</pre>`;
@@ -113,14 +192,8 @@ $('btSubir').addEventListener('click', async () => {
     forma.append('arquivo', arquivo);
     status('Enviando o PDF...', 10);
 
-    const r = await fetch('/materias', {
-      method: 'POST',
-      headers: {
-        'x-usuario-id': $('usuario').value.trim() || 'usuario-zero',
-        'x-fuso': Intl.DateTimeFormat().resolvedOptions().timeZone,
-      },
-      body: forma,
-    });
+    // Sem Content-Type: o navegador tem que pôr o boundary do multipart.
+    const r = await fetch('/materias', { method: 'POST', headers: cabecalhos(), body: forma });
     const corpo = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(corpo.erro || `${r.status} ${r.statusText}`);
 

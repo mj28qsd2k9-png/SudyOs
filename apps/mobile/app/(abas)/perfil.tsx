@@ -1,5 +1,5 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEstado } from '../../src/dados/estado';
@@ -10,8 +10,28 @@ import { Pessoa } from '../../src/ui/icones';
 import { cores, espaco, raio, tamanho } from '../../src/ui/tema';
 
 export default function Perfil() {
-  const { perfil, objetivo, sessao, materias } = useEstado();
+  const { perfil, objetivo, email, sessao, materias, sair } = useEstado();
+  const [saindo, setSaindo] = useState(false);
   const router = useRouter();
+
+  const confirmarSaida = () => {
+    const executar = async () => {
+      setSaindo(true);
+      await sair();
+      // O redirecionamento e do `app/index.tsx`, que reage a sessao sumir.
+      router.replace('/');
+    };
+
+    // Alert.alert nao existe na web; ali o confirm do navegador faz o papel.
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm?.('Sair da conta neste aparelho?')) void executar();
+      return;
+    }
+    Alert.alert('Sair da conta?', 'Você vai precisar entrar de novo neste aparelho.', [
+      { text: 'Ficar', style: 'cancel' },
+      { text: 'Sair', style: 'destructive', onPress: () => void executar() },
+    ]);
+  };
 
   const numeros = [
     { valor: perfil?.ofensiva.streak ?? 0, rotulo: 'Ofensiva', cor: cores.coral },
@@ -32,7 +52,9 @@ export default function Perfil() {
             <Pessoa tamanho={28} cor="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={e.nome}>Estudante</Text>
+            <Text style={e.nome} numberOfLines={1}>
+              {email ?? 'Estudante'}
+            </Text>
             <Text style={e.detalhe}>Objetivo: {objetivo ?? '—'}</Text>
             <Text style={e.detalhe}>Plano: {perfil?.plano ?? '—'}</Text>
           </View>
@@ -71,15 +93,21 @@ export default function Perfil() {
         <Text style={e.secao}>Ofensiva</Text>
         <Botao titulo="Ver minha ofensiva" variante="fantasma" aoTocar={() => router.push('/ofensiva')} />
 
+        <Text style={e.secao}>Conta</Text>
+        <Botao
+          titulo="Sair desta conta"
+          variante="fantasma"
+          carregando={saindo}
+          aoTocar={confirmarSaida}
+        />
+
         <Text style={e.secao}>Sobre</Text>
         <Cartao>
           <Text style={e.detalhe}>Servidor: {api.base}</Text>
-          <Text style={e.detalhe}>Fuso: {sessao.fuso}</Text>
-          <Text style={e.detalhe} numberOfLines={1}>
-            Aparelho: {sessao.usuarioId}
-          </Text>
+          <Text style={e.detalhe}>Fuso: {sessao?.fuso ?? '—'}</Text>
           <Text style={[e.detalhe, { marginTop: espaco.sm, lineHeight: 18 }]}>
-            A conta ainda é por aparelho: sem login, os dados não seguem você para outro celular.
+            Suas matérias ficam na conta, não no aparelho: entrando com o mesmo e-mail em outro
+            celular, tudo está lá.
           </Text>
         </Cartao>
       </ScrollView>

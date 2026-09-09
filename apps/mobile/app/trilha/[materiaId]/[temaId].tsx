@@ -3,7 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { corrigir, temaFoiGerado, type Materia, type Questao, type Tema } from '@estudaai/shared';
-import { useEstado } from '../../../src/dados/estado';
+import { useEstado, useSessao } from '../../../src/dados/estado';
 import { api, type ResultadoConclusao } from '../../../src/api/cliente';
 import { Barra, Botao, NumeroQueSobe, Pulinho, Sacudida } from '../../../src/ui/componentes';
 import { Confete } from '../../../src/ui/confete';
@@ -24,7 +24,8 @@ type Fase = 'carregando' | 'aula' | 'questoes' | 'fim';
  */
 export default function Trilha() {
   const { materiaId, temaId } = useLocalSearchParams<{ materiaId: string; temaId: string }>();
-  const { pronto, sessao, recarregar, adicionarAnotacao } = useEstado();
+  const { pronto, recarregar, adicionarAnotacao } = useEstado();
+  const sessao = useSessao();
   const router = useRouter();
 
   const [materia, setMateria] = useState<Materia | null>(null);

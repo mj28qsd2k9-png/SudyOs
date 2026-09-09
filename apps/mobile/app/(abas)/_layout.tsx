@@ -8,7 +8,6 @@ export default function LayoutAbas() {
   // A barra precisa caber o icone, o rotulo e a area segura do aparelho. Altura
   // fixa cortava o rotulo em tela sem inset (a web, por exemplo).
   const inset = useSafeAreaInsets();
-
   return (
     <Tabs
       screenOptions={{

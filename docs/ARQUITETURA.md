@@ -182,6 +182,50 @@ o número cheio até o dia virar.
 A resposta da conclusão já devolve as **tags dos conceitos errados** — é o
 insumo da revisão espaçada, que ainda não foi construída.
 
+## Autenticação
+
+Sessão com **token opaco**, não JWT. JWT não dá para revogar sem uma lista de
+bloqueio — que é um banco de sessões com outro nome — e obriga a cuidar de
+chave de assinatura e de armadilha de algoritmo. Um token aleatório de 32 bytes
+guardado no banco revoga na hora e faz o "sair de todos os aparelhos" sair de
+graça.
+
+O que o banco guarda é o **SHA-256 do token**, nunca o token. Vazamento do banco
+não entrega a sessão de ninguém, pela mesma razão que não se guarda senha crua.
+SHA-256 basta aqui: o token já tem 256 bits de entropia, então não há dicionário
+a percorrer — o motivo de usar KDF cara em senha não se aplica.
+
+**Senha com scrypt**, do próprio Node. É uma KDF cara de propósito: custa
+memória, o que encarece muito o ataque com GPU. bcrypt e argon2 fariam o mesmo,
+mas são módulos nativos que precisam compilar. O formato guardado
+(`scrypt$N$r$p$sal$hash`) leva os parâmetros junto, o que permite endurecer o
+custo depois sem invalidar as senhas já cadastradas.
+
+Decisões que valem registro:
+
+- **O guarda é de escopo, não de rota.** `exigirSessao` entra como `preHandler`
+  no registro que contém as rotas protegidas. Rota nova nasce protegida; não
+  existe a chance de esquecer numa.
+- **E-mail inexistente e senha errada respondem igual.** Diferenciar entregaria
+  a lista de quem tem conta. O caminho sem conta ainda gasta um hash falso, para
+  não dar para distinguir pelo relógio.
+- **Freio de força bruta em memória** (8 tentativas por IP+e-mail em 15 min).
+  Segura o caso óbvio sem exigir Redis. Em várias instâncias cada uma conta a
+  sua, então é piso, não teto — um limitador compartilhado entra junto com o
+  deploy multi-instância.
+- **Sessão de 90 dias, renovada por uso.** App de hábito diário não pode pedir
+  login toda semana. A renovação só grava se passou de um dia, senão seria uma
+  escrita no banco por requisição — incluindo o polling da geração.
+- **O que o aluno gerou antes de ter conta vem junto.** No cadastro, o app manda
+  o id do aparelho e o servidor passa as matérias para a conta nova. Sem isso, a
+  primeira coisa que ele faria depois de se cadastrar era perder o que gerou. Um
+  aparelho já reivindicado não é transferido de novo.
+- **No app, o token vai para o Keychain/Keystore** (`expo-secure-store`), não
+  para o `AsyncStorage`, que é texto puro no sistema de arquivos.
+
+O que ainda não existe: recuperação de senha (precisa de envio de e-mail),
+verificação de e-mail e login social.
+
 ## Persistência
 
 **SQLite, pelo módulo nativo do Node** (`node:sqlite`) — zero dependências.
@@ -207,7 +251,6 @@ quando isso acontecer:
 ```prisma
 model Usuario {
   id                 String   @id @default(uuid())
-  email              String   @unique
   plano              String   @default("basico")
   xp                 Int      @default(0)
   fuso               String   @default("America/Sao_Paulo")
@@ -221,6 +264,30 @@ model Usuario {
   conclusoes         Conclusao[]
   erros              ErroConceito[]
   anotacoes          Anotacao[]
+  credencial         Credencial?
+  sessoes            Sessao[]
+}
+
+model Credencial {
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  usuarioId String   @id
+  email     String   @unique
+  // scrypt$N$r$p$sal$hash — os parametros vao junto, para dar para endurecer
+  // o custo depois sem invalidar as senhas ja cadastradas.
+  senhaHash String
+  criadaEm  DateTime @default(now())
+}
+
+model Sessao {
+  // SHA-256 do token. O token em si nunca e gravado.
+  tokenHash String   @id
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  usuarioId String
+  criadaEm  DateTime @default(now())
+  expiraEm  DateTime
+  ultimoUso DateTime
+  @@index([usuarioId])
+  @@index([expiraEm])
 }
 
 model CotaMes {
@@ -311,7 +378,8 @@ model Anotacao {
   equivalente e som exigiria arquivos de áudio, que ainda não existem. O app
   entrega vibração (`expo-haptics`), que no celular é o retorno que mais se
   sente.
-- **Autenticação.** Já dito acima: o id vem de um cabeçalho, sem verificação.
+- **Recuperação de senha.** Não existe. Quem esquecer a senha perde a conta até
+  o envio de e-mail entrar.
 - **Anotações.** O app guarda grifos e notas no aparelho (`AsyncStorage`); o
   backend ainda não tem endpoint para elas. Trocar de celular perde as
   anotações.

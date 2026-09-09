@@ -1,5 +1,6 @@
 import type { Materia, Plano, Questao, Tema } from '@estudaai/shared';
 import type { EstadoOfensiva } from '@estudaai/shared';
+import type { Sessao } from '../dominio/autenticacao.js';
 
 /**
  * Persistencia.
@@ -23,8 +24,17 @@ export type Usuario = {
   concluidos: string[];
 };
 
+/** Credencial de acesso. A senha nunca aparece aqui — so o hash. */
+export type Credencial = {
+  usuarioId: string;
+  email: string;
+  senhaHash: string;
+  criadaEm: string;
+};
+
 export interface Repositorio {
   obterUsuario(id: string, fuso: string): Promise<Usuario>;
+  criarUsuario(usuario: Usuario): Promise<void>;
   salvarUsuario(usuario: Usuario): Promise<void>;
   listarMaterias(usuarioId: string): Promise<Materia[]>;
   obterMateria(usuarioId: string, materiaId: string): Promise<Materia | null>;
@@ -32,6 +42,26 @@ export interface Repositorio {
   /** O texto do material fica fora da materia: e grande e so o servidor usa. */
   obterBlocos(usuarioId: string, materiaId: string): Promise<string[] | null>;
   salvarBlocos(usuarioId: string, materiaId: string, blocos: string[]): Promise<void>;
+
+  // --- autenticacao ---
+  obterCredencialPorEmail(email: string): Promise<Credencial | null>;
+  obterCredencialPorUsuario(usuarioId: string): Promise<Credencial | null>;
+  salvarCredencial(credencial: Credencial): Promise<void>;
+
+  criarSessao(sessao: Sessao): Promise<void>;
+  obterSessao(tokenHash: string): Promise<Sessao | null>;
+  renovarSessao(tokenHash: string, expiraEm: string, ultimoUso: string): Promise<void>;
+  apagarSessao(tokenHash: string): Promise<void>;
+  apagarSessoesDoUsuario(usuarioId: string): Promise<void>;
+  /** Remove sessoes vencidas. Devolve quantas saiu. */
+  limparSessoesVencidas(agora: Date): Promise<number>;
+
+  /**
+   * Passa tudo de um usuario para outro. Serve para o aluno que usou o app sem
+   * conta e depois se cadastrou: sem isto, a primeira coisa que ele faria
+   * depois de criar a conta seria perder as materias que gerou.
+   */
+  transferirDados(deId: string, paraId: string): Promise<void>;
 }
 
 function usuarioNovo(id: string, fuso: string): Usuario {
@@ -59,6 +89,72 @@ export class RepositorioMemoria implements Repositorio {
   private usuarios = new Map<string, Usuario>();
   private materias = new Map<string, Map<string, Materia>>();
   private blocos = new Map<string, string[]>();
+  private credenciais = new Map<string, Credencial>();
+  private sessoes = new Map<string, Sessao>();
+
+  async criarUsuario(usuario: Usuario): Promise<void> {
+    this.usuarios.set(usuario.id, usuario);
+  }
+
+  async obterCredencialPorEmail(email: string): Promise<Credencial | null> {
+    return this.credenciais.get(email) ?? null;
+  }
+
+  async obterCredencialPorUsuario(usuarioId: string): Promise<Credencial | null> {
+    return [...this.credenciais.values()].find((c) => c.usuarioId === usuarioId) ?? null;
+  }
+
+  async salvarCredencial(credencial: Credencial): Promise<void> {
+    this.credenciais.set(credencial.email, credencial);
+  }
+
+  async criarSessao(sessao: Sessao): Promise<void> {
+    this.sessoes.set(sessao.tokenHash, sessao);
+  }
+
+  async obterSessao(tokenHash: string): Promise<Sessao | null> {
+    return this.sessoes.get(tokenHash) ?? null;
+  }
+
+  async renovarSessao(tokenHash: string, expiraEm: string, ultimoUso: string): Promise<void> {
+    const s = this.sessoes.get(tokenHash);
+    if (s) this.sessoes.set(tokenHash, { ...s, expiraEm, ultimoUso });
+  }
+
+  async apagarSessao(tokenHash: string): Promise<void> {
+    this.sessoes.delete(tokenHash);
+  }
+
+  async apagarSessoesDoUsuario(usuarioId: string): Promise<void> {
+    for (const [k, s] of this.sessoes) if (s.usuarioId === usuarioId) this.sessoes.delete(k);
+  }
+
+  async limparSessoesVencidas(agora: Date): Promise<number> {
+    let n = 0;
+    for (const [k, s] of this.sessoes) {
+      if (Date.parse(s.expiraEm) <= agora.getTime()) {
+        this.sessoes.delete(k);
+        n += 1;
+      }
+    }
+    return n;
+  }
+
+  async transferirDados(deId: string, paraId: string): Promise<void> {
+    const doOrigem = this.materias.get(deId);
+    if (doOrigem) {
+      const destino = this.materias.get(paraId) ?? new Map<string, Materia>();
+      for (const [id, m] of doOrigem) destino.set(id, m);
+      this.materias.set(paraId, destino);
+      this.materias.delete(deId);
+    }
+    for (const [chave, valor] of [...this.blocos]) {
+      if (chave.startsWith(`${deId}:`)) {
+        this.blocos.set(chave.replace(`${deId}:`, `${paraId}:`), valor);
+        this.blocos.delete(chave);
+      }
+    }
+  }
 
   async obterUsuario(id: string, fuso: string): Promise<Usuario> {
     let usuario = this.usuarios.get(id);

@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { temaFoiGerado, type Materia, type Tema } from '@estudaai/shared';
-import { useEstado } from '../../src/dados/estado';
+import { useEstado, useSessao } from '../../src/dados/estado';
 import { api, ErroApi } from '../../src/api/cliente';
 import { Aviso, Cartao, EmCascata, Subtitulo, Titulo } from '../../src/ui/componentes';
 import { Confere } from '../../src/ui/icones';
@@ -13,7 +13,8 @@ import { cores, espaco, raio, tamanho } from '../../src/ui/tema';
 
 export default function TelaMateria() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { pronto, sessao, perfil } = useEstado();
+  const { pronto, perfil } = useEstado();
+  const sessao = useSessao();
   const [materia, setMateria] = useState<Materia | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [gerando, setGerando] = useState<string | null>(null);

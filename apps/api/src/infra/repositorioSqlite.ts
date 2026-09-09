@@ -2,7 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { MateriaSchema, type Materia, type Plano } from '@estudaai/shared';
-import { competenciaAtual, type Repositorio, type Usuario } from './repositorio.js';
+import type { Sessao } from '../dominio/autenticacao.js';
+import { competenciaAtual, type Credencial, type Repositorio, type Usuario } from './repositorio.js';
 
 /**
  * Persistencia em SQLite, pelo modulo nativo do Node (sem dependencia).
@@ -46,6 +47,26 @@ CREATE TABLE IF NOT EXISTS materiais (
   usuario_id TEXT NOT NULL,
   blocos TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS credenciais (
+  usuario_id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  senha_hash TEXT NOT NULL,
+  criada_em TEXT NOT NULL
+);
+-- Indice UNICO, nao so unicidade na aplicacao: duas requisicoes de cadastro
+-- simultaneas com o mesmo e-mail passariam por qualquer checagem em codigo.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credenciais_email ON credenciais (email);
+
+CREATE TABLE IF NOT EXISTS sessoes (
+  token_hash TEXT PRIMARY KEY,
+  usuario_id TEXT NOT NULL,
+  criada_em TEXT NOT NULL,
+  expira_em TEXT NOT NULL,
+  ultimo_uso TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes (usuario_id);
+CREATE INDEX IF NOT EXISTS idx_sessoes_expira ON sessoes (expira_em);
 `;
 
 type LinhaUsuario = {
@@ -201,5 +222,108 @@ export class RepositorioSqlite implements Repositorio {
          ON CONFLICT(materia_id) DO UPDATE SET blocos = excluded.blocos`,
       )
       .run(materiaId, usuarioId, JSON.stringify(blocos));
+  }
+
+  async criarUsuario(usuario: Usuario): Promise<void> {
+    await this.salvarUsuario(usuario);
+  }
+
+  // --- autenticacao ---
+
+  async obterCredencialPorEmail(email: string): Promise<Credencial | null> {
+    const l = this.db.prepare('SELECT * FROM credenciais WHERE email = ?').get(email) as
+      | { usuario_id: string; email: string; senha_hash: string; criada_em: string }
+      | undefined;
+    return l
+      ? { usuarioId: l.usuario_id, email: l.email, senhaHash: l.senha_hash, criadaEm: l.criada_em }
+      : null;
+  }
+
+  async obterCredencialPorUsuario(usuarioId: string): Promise<Credencial | null> {
+    const l = this.db.prepare('SELECT * FROM credenciais WHERE usuario_id = ?').get(usuarioId) as
+      | { usuario_id: string; email: string; senha_hash: string; criada_em: string }
+      | undefined;
+    return l
+      ? { usuarioId: l.usuario_id, email: l.email, senhaHash: l.senha_hash, criadaEm: l.criada_em }
+      : null;
+  }
+
+  async salvarCredencial(c: Credencial): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO credenciais (usuario_id, email, senha_hash, criada_em)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(usuario_id) DO UPDATE SET
+           email = excluded.email,
+           senha_hash = excluded.senha_hash`,
+      )
+      .run(c.usuarioId, c.email, c.senhaHash, c.criadaEm);
+  }
+
+  async criarSessao(s: Sessao): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO sessoes (token_hash, usuario_id, criada_em, expira_em, ultimo_uso)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(s.tokenHash, s.usuarioId, s.criadaEm, s.expiraEm, s.ultimoUso);
+  }
+
+  async obterSessao(tokenHash: string): Promise<Sessao | null> {
+    const l = this.db.prepare('SELECT * FROM sessoes WHERE token_hash = ?').get(tokenHash) as
+      | {
+          token_hash: string;
+          usuario_id: string;
+          criada_em: string;
+          expira_em: string;
+          ultimo_uso: string;
+        }
+      | undefined;
+    return l
+      ? {
+          tokenHash: l.token_hash,
+          usuarioId: l.usuario_id,
+          criadaEm: l.criada_em,
+          expiraEm: l.expira_em,
+          ultimoUso: l.ultimo_uso,
+        }
+      : null;
+  }
+
+  async renovarSessao(tokenHash: string, expiraEm: string, ultimoUso: string): Promise<void> {
+    this.db
+      .prepare('UPDATE sessoes SET expira_em = ?, ultimo_uso = ? WHERE token_hash = ?')
+      .run(expiraEm, ultimoUso, tokenHash);
+  }
+
+  async apagarSessao(tokenHash: string): Promise<void> {
+    this.db.prepare('DELETE FROM sessoes WHERE token_hash = ?').run(tokenHash);
+  }
+
+  async apagarSessoesDoUsuario(usuarioId: string): Promise<void> {
+    this.db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(usuarioId);
+  }
+
+  async limparSessoesVencidas(agora: Date): Promise<number> {
+    const r = this.db
+      .prepare('DELETE FROM sessoes WHERE expira_em <= ?')
+      .run(agora.toISOString());
+    return Number(r.changes);
+  }
+
+  /**
+   * Tudo numa transacao: se o meio falhar, o aluno nao pode ficar com metade
+   * das materias numa conta e metade na outra.
+   */
+  async transferirDados(deId: string, paraId: string): Promise<void> {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare('UPDATE materias SET usuario_id = ? WHERE usuario_id = ?').run(paraId, deId);
+      this.db.prepare('UPDATE materiais SET usuario_id = ? WHERE usuario_id = ?').run(paraId, deId);
+      this.db.exec('COMMIT');
+    } catch (erro) {
+      this.db.exec('ROLLBACK');
+      throw erro;
+    }
   }
 }

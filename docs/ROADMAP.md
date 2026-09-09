@@ -26,12 +26,15 @@ onboarding, home, nova matéria, geração com progresso, matéria, aula com
 anotações, os 7 tipos de exercício, conclusão com comemoração de ofensiva,
 tela de ofensiva, missões, notas e perfil.
 
+**Autenticação.** Conta com e-mail e senha (scrypt), sessão por token opaco
+revogável de 90 dias, freio de força bruta e o token no Keychain/Keystore do
+aparelho. O que o aluno gerou antes de se cadastrar é transferido para a conta
+nova. Entrando com o mesmo e-mail em outro celular, tudo está lá.
+
 ## Próximo
 
-**Autenticação.** É o que falta para o app deixar de ser por aparelho. Hoje o
-id do usuário é gerado na primeira abertura e guardado no aparelho; trocar de
-celular perde tudo. Dois pontos encostam nisso e só eles:
-`apps/api/src/rotas/contexto.ts` e `apps/mobile/src/api/cliente.ts`.
+**Recuperação de senha.** Hoje quem esquece a senha perde a conta. Precisa de
+envio de e-mail — é a única peça que exige um serviço de fora.
 
 **Anotações no servidor.** O app guarda grifos e notas em `AsyncStorage`. A
 tabela está desenhada em `ARQUITETURA.md`; falta o endpoint.

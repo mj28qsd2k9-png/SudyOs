@@ -8,6 +8,8 @@ import type { Config } from './config.js';
 import { criarGerador, type GeradorIA } from './ia/cliente.js';
 import type { Repositorio } from './infra/repositorio.js';
 import { RepositorioSqlite } from './infra/repositorioSqlite.js';
+import { rotasAuth } from './rotas/auth.js';
+import { exigirSessao } from './rotas/contexto.js';
 import { rotasMaterias } from './rotas/materias.js';
 import { rotasProgresso } from './rotas/progresso.js';
 import { MAX_BYTES_PDF } from './material/pdf.js';
@@ -72,6 +74,13 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
   }));
 
   await app.register(async (instancia) => {
+    await rotasAuth(instancia, { repo });
+  });
+
+  // Tudo daqui para baixo exige sessao. O guarda fica no escopo, nao em cada
+  // rota: assim nao existe a chance de esquecer numa rota nova.
+  await app.register(async (instancia) => {
+    instancia.addHook('preHandler', exigirSessao(repo));
     await rotasMaterias(instancia, {
       repo,
       gerador,
@@ -82,7 +91,10 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
   });
 
   // Tarefa concluida vira lixo depois de um tempo; sem isso a memoria so cresce.
-  const faxina = setInterval(() => fila.limpar(), 15 * 60 * 1000);
+  const faxina = setInterval(() => {
+    fila.limpar();
+    void repo.limparSessoesVencidas(new Date());
+  }, 15 * 60 * 1000);
   faxina.unref();
   app.addHook('onClose', async () => clearInterval(faxina));
 

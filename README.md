@@ -12,10 +12,10 @@ API própria.
 
 **O app**, em React Native + Expo, contra o backend de verdade:
 
-- onboarding, home com as matérias, upload de PDF, tela de geração com
-  progresso, matéria com os temas, aula com anotações, os **7 tipos de
-  exercício**, conclusão com XP e ofensiva, tela de ofensiva, missões, notas e
-  perfil.
+- onboarding, **conta (entrar/cadastrar)**, home com as matérias, upload de PDF,
+  tela de geração com progresso, matéria com os temas, aula com anotações, os
+  **7 tipos de exercício**, conclusão com XP e ofensiva, tela de ofensiva,
+  missões, notas e perfil.
 
 **O backend**, em Fastify:
 
@@ -28,6 +28,9 @@ API própria.
   então a conexão pode cair sem perder o trabalho;
 - **prompt caching** do material dentro de cada família de chamada;
 - **cota do plano** aplicada no servidor (80 questões/mês no plano básico);
+- **contas de verdade**: senha com scrypt, sessão por token opaco revogável
+  (guardado só como hash), freio de força bruta, e o que o aluno gerou antes de
+  se cadastrar vem junto para a conta nova;
 - **ofensiva server-authoritative**: a data vem do relógio do servidor no fuso
   do aluno, e a correção das respostas também é do servidor;
 - **SQLite** (módulo nativo do Node, sem dependência): tudo sobrevive ao
@@ -36,7 +39,7 @@ API própria.
   com Sonnet 5 — número medido; ver [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)).
 
 O que falta está em [`docs/ROADMAP.md`](docs/ROADMAP.md) — o próximo é
-autenticação, para o app deixar de ser por aparelho.
+recuperação de senha e as anotações no servidor.
 
 ## Rodando
 
@@ -61,7 +64,7 @@ PDF e mostra a trilha crua, com as respostas à vista. É ferramenta de
 desenvolvimento, não o app.
 
 ```bash
-npm test           # 105 testes, nenhum toca a rede
+npm test           # 134 testes, nenhum toca a rede
 npm run typecheck
 ```
 
@@ -78,12 +81,17 @@ prototipo/           O protótipo original, como referência de UX.
 
 ## API
 
-Todas as rotas identificam o usuário pelo cabeçalho `x-usuario-id` e aceitam
-`x-fuso` (IANA, ex.: `America/Sao_Paulo`). **Isso é provisório** — é exatamente
-o ponto onde a autenticação entra; veja `apps/api/src/rotas/contexto.ts`.
+Fora de `/saude` e `/auth/*`, tudo exige `Authorization: Bearer <token>`. O
+cabeçalho `x-fuso` (IANA, ex.: `America/Sao_Paulo`) diz onde o aluno está — quem
+decide que dia é hoje continua sendo o servidor.
 
 | Método | Rota | O que faz |
 |---|---|---|
+| `POST` | `/auth/cadastrar` | `{ email, senha, aparelho? }` → cria a conta e abre sessão |
+| `POST` | `/auth/entrar` | `{ email, senha }` → abre sessão |
+| `POST` | `/auth/sair` | Invalida o token deste aparelho |
+| `POST` | `/auth/sair-de-todos` | Invalida todas as sessões da conta |
+| `GET` | `/auth/eu` | Quem é o dono da sessão |
 | `GET` | `/saude` | Modelo em uso e se a chave está configurada |
 | `GET` | `/materias` | Matérias do usuário |
 | `GET` | `/materias/:id` | Uma matéria com seus temas |

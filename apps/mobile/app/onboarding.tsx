@@ -29,7 +29,7 @@ export default function Onboarding() {
       return;
     }
     await concluirOnboarding(objetivo);
-    router.replace('/(abas)');
+    router.replace('/entrar');
   };
 
   return (

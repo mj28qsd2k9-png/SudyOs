@@ -4,9 +4,16 @@ import { Redirect } from 'expo-router';
 import { useEstado } from '../src/dados/estado';
 import { cores } from '../src/ui/tema';
 
-/** Porta de entrada: decide entre onboarding e o app, sem piscar nenhum dos dois. */
+/**
+ * Porta de entrada.
+ *
+ * Tres estados, nesta ordem: carregando o que estava guardado, apresentar o
+ * produto (onboarding), pedir a conta. O onboarding vem antes do login de
+ * proposito — pedir e-mail a alguem que ainda nao sabe o que o app faz e o jeito
+ * mais rapido de perder a pessoa.
+ */
 export default function Entrada() {
-  const { pronto, onboardingFeito } = useEstado();
+  const { pronto, onboardingFeito, autenticado } = useEstado();
 
   if (!pronto) {
     return (
@@ -16,5 +23,7 @@ export default function Entrada() {
     );
   }
 
-  return <Redirect href={onboardingFeito ? '/(abas)' : '/onboarding'} />;
+  if (!onboardingFeito) return <Redirect href="/onboarding" />;
+  if (!autenticado) return <Redirect href="/entrar" />;
+  return <Redirect href="/(abas)" />;
 }

@@ -13,17 +13,59 @@ const MATERIAL = (
 ).repeat(6);
 
 /**
+ * Contas de teste.
+ *
+ * As rotas agora exigem sessao, entao o teste passa pelo mesmo caminho do app:
+ * cadastra e usa o token. Isso tambem faz cada teste exercitar a autenticacao
+ * de graca — se o guarda quebrar, tudo aqui cai junto.
+ */
+const SENHA = 'senha-de-teste-123';
+const contas = new WeakMap<FastifyInstance, Map<string, { token: string; usuarioId: string }>>();
+
+async function conta(app: FastifyInstance, nome = 'ana') {
+  let porApp = contas.get(app);
+  if (!porApp) {
+    porApp = new Map();
+    contas.set(app, porApp);
+  }
+  const guardada = porApp.get(nome);
+  if (guardada) return guardada;
+
+  const r = await app.inject({
+    method: 'POST',
+    url: '/auth/cadastrar',
+    payload: { email: `${nome}@teste.com`, senha: SENHA },
+  });
+  expect(r.statusCode, `cadastro de ${nome} falhou: ${r.body}`).toBe(201);
+  const token = r.json().token as string;
+
+  const eu = await app.inject({
+    method: 'GET',
+    url: '/auth/eu',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const nova = { token, usuarioId: eu.json().usuarioId as string };
+  porApp.set(nome, nova);
+  return nova;
+}
+
+async function cabecalhos(
+  app: FastifyInstance,
+  nome = 'ana',
+  extras: Record<string, string> = {},
+) {
+  return { authorization: `Bearer ${(await conta(app, nome)).token}`, ...extras };
+}
+
+/**
  * Geracao virou tarefa em segundo plano: a rota responde 202 na hora e o
  * trabalho continua. O teste segue o mesmo caminho do app — pergunta o estado
  * ate a tarefa terminar.
  */
 async function aguardarTarefa(app: FastifyInstance, tarefaId: string, usuario = 'ana') {
+  const cab = await cabecalhos(app, usuario);
   for (let i = 0; i < 200; i += 1) {
-    const r = await app.inject({
-      method: 'GET',
-      url: `/tarefas/${tarefaId}`,
-      headers: { 'x-usuario-id': usuario },
-    });
+    const r = await app.inject({ method: 'GET', url: `/tarefas/${tarefaId}`, headers: cab });
     const t = r.json();
     if (t.estado === 'concluida' || t.estado === 'falhou') return t;
     await new Promise((r) => setImmediate(r));
@@ -36,10 +78,11 @@ async function subirEEsperar(
   payload: unknown,
   usuario = 'ana',
 ): Promise<{ materia: any; tarefa: any }> {
+  const cab = await cabecalhos(app, usuario);
   const r = await app.inject({
     method: 'POST',
     url: '/materias',
-    headers: { 'x-usuario-id': usuario },
+    headers: cab,
     payload: payload as object,
   });
   if (r.statusCode !== 202) return { materia: null, tarefa: r.json() };
@@ -48,7 +91,7 @@ async function subirEEsperar(
   const m = await app.inject({
     method: 'GET',
     url: `/materias/${tarefa.resultado.materiaId}`,
-    headers: { 'x-usuario-id': usuario },
+    headers: cab,
   });
   return { materia: m.json().materia, tarefa };
 }
@@ -98,7 +141,7 @@ describe('rotas de geracao', () => {
     const r = await app.inject({
       method: 'POST',
       url: '/materias',
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
       payload: { texto: MATERIAL },
     });
     // 202: aceito. O aluno nao fica preso numa requisicao de dois minutos.
@@ -114,13 +157,13 @@ describe('rotas de geracao', () => {
     const r = await app.inject({
       method: 'POST',
       url: '/materias',
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
       payload: { texto: MATERIAL },
     });
     const espiando = await app.inject({
       method: 'GET',
       url: `/tarefas/${r.json().tarefaId}`,
-      headers: { 'x-usuario-id': 'carla' },
+      headers: await cabecalhos(app, 'carla'),
     });
     expect(espiando.statusCode).toBe(404);
   });
@@ -144,7 +187,7 @@ describe('rotas de geracao', () => {
     const r = await app.inject({
       method: 'POST',
       url: '/materias',
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
       payload: { texto: 'pouco texto' },
     });
     expect(r.statusCode).toBe(422);
@@ -159,7 +202,7 @@ describe('rotas de geracao', () => {
     const r = await app.inject({
       method: 'POST',
       url: `/materias/${materiaId}/temas/${segundoId}/gerar`,
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
     });
     expect(r.statusCode).toBe(202);
     expect((await aguardarTarefa(app, r.json().tarefaId)).estado).toBe('concluida');
@@ -167,7 +210,7 @@ describe('rotas de geracao', () => {
     const atual = await app.inject({
       method: 'GET',
       url: `/materias/${materiaId}`,
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
     });
     expect(atual.json().materia.temas[1].questoes).toHaveLength(8);
 
@@ -175,7 +218,7 @@ describe('rotas de geracao', () => {
     const denovo = await app.inject({
       method: 'POST',
       url: `/materias/${materiaId}/temas/${segundoId}/gerar`,
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
     });
     expect(denovo.statusCode).toBe(200); // ja pronto: responde sem abrir tarefa
     expect(falso.chamadas.length).toBe(antes);
@@ -188,7 +231,7 @@ describe('rotas de geracao', () => {
     const r = await outro.inject({
       method: 'POST',
       url: '/materias',
-      headers: { 'x-usuario-id': 'bia' },
+      headers: await cabecalhos(outro, 'bia'),
       payload: { texto: MATERIAL },
     });
     const tarefa = await aguardarTarefa(outro, r.json().tarefaId, 'bia');
@@ -199,7 +242,7 @@ describe('rotas de geracao', () => {
     const lista = await outro.inject({
       method: 'GET',
       url: '/materias',
-      headers: { 'x-usuario-id': 'bia' },
+      headers: await cabecalhos(outro, 'bia'),
     });
     expect(lista.json().materias).toHaveLength(1);
     await outro.close();
@@ -210,7 +253,7 @@ describe('rotas de geracao', () => {
     const r = await app.inject({
       method: 'GET',
       url: `/materias/${materia.id}`,
-      headers: { 'x-usuario-id': 'carla' },
+      headers: await cabecalhos(app, 'carla'),
     });
     expect(r.statusCode).toBe(404);
   });
@@ -222,7 +265,8 @@ describe('cota', () => {
     const falso = criarGeradorFalso();
     const app = await criarApp({ config: config(), repo, gerador: falso.gerador });
 
-    const usuario = await repo.obterUsuario('duda', 'America/Sao_Paulo');
+    const { usuarioId } = await conta(app, 'duda');
+    const usuario = await repo.obterUsuario(usuarioId, 'America/Sao_Paulo');
     usuario.plano = 'basico';
     usuario.cota.questoesUsadas = 80; // plano basico = 80 questoes/mes
     await repo.salvarUsuario(usuario);
@@ -230,7 +274,7 @@ describe('cota', () => {
     const r = await app.inject({
       method: 'POST',
       url: '/materias',
-      headers: { 'x-usuario-id': 'duda' },
+      headers: await cabecalhos(app, 'duda'),
       payload: { texto: MATERIAL },
     });
     expect(r.statusCode).toBe(402);
@@ -266,7 +310,7 @@ describe('conclusao de tema', () => {
     const r = await app.inject({
       method: 'POST',
       url: '/progresso/concluir',
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
       payload: { materiaId, temaId: tema.id, respostas },
     });
 
@@ -283,7 +327,7 @@ describe('conclusao de tema', () => {
     const r = await app.inject({
       method: 'POST',
       url: '/progresso/concluir',
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
       payload: {
         materiaId,
         temaId: tema.id,
@@ -299,11 +343,12 @@ describe('conclusao de tema', () => {
 
   it('nao sobe a ofensiva duas vezes no mesmo dia', async () => {
     const { materiaId, tema } = await temaPronto();
+    const cab = await cabecalhos(app, 'ana');
     const concluir = () =>
       app.inject({
         method: 'POST',
         url: '/progresso/concluir',
-        headers: { 'x-usuario-id': 'ana' },
+        headers: cab,
         payload: { materiaId, temaId: tema.id, respostas: [] },
       });
 
@@ -322,7 +367,7 @@ describe('conclusao de tema', () => {
     const conclusao = await app.inject({
       method: 'POST',
       url: '/progresso/concluir',
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
       payload: { materiaId: materia.id, temaId: naoGerado.id, respostas: [] },
     });
     expect(conclusao.statusCode).toBe(409);
@@ -333,14 +378,14 @@ describe('conclusao de tema', () => {
     await app.inject({
       method: 'POST',
       url: '/progresso/concluir',
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
       payload: { materiaId, temaId: tema.id, respostas: [] },
     });
 
     const r = await app.inject({
       method: 'GET',
       url: '/perfil',
-      headers: { 'x-usuario-id': 'ana', 'x-fuso': 'America/Sao_Paulo' },
+      headers: await cabecalhos(app, 'ana', { 'x-fuso': 'America/Sao_Paulo' }),
     });
     const corpo = r.json();
     expect(corpo.ofensiva.streak).toBe(1);
@@ -354,7 +399,7 @@ describe('conclusao de tema', () => {
     const r = await app.inject({
       method: 'GET',
       url: '/perfil',
-      headers: { 'x-usuario-id': 'ana', 'x-fuso': 'Nao/Existe' },
+      headers: await cabecalhos(app, 'ana', { 'x-fuso': 'Nao/Existe' }),
     });
     expect(r.statusCode).toBe(200);
     expect(r.json().ofensiva.fuso).toBe('America/Sao_Paulo');
@@ -369,11 +414,12 @@ describe('cota no perfil', () => {
     const livre = await app.inject({
       method: 'GET',
       url: '/perfil',
-      headers: { 'x-usuario-id': 'livre' },
+      headers: await cabecalhos(app, 'livre'),
     });
     expect(livre.json().cota).toMatchObject({ ilimitada: true, temasRestantes: null });
 
-    const usuario = await repo.obterUsuario('pago', 'America/Sao_Paulo');
+    const { usuarioId } = await conta(app, 'pago');
+    const usuario = await repo.obterUsuario(usuarioId, 'America/Sao_Paulo');
     usuario.plano = 'basico';
     usuario.cota.questoesUsadas = 40;
     await repo.salvarUsuario(usuario);
@@ -381,7 +427,7 @@ describe('cota no perfil', () => {
     const pago = await app.inject({
       method: 'GET',
       url: '/perfil',
-      headers: { 'x-usuario-id': 'pago' },
+      headers: await cabecalhos(app, 'pago'),
     });
     expect(pago.json().cota).toMatchObject({ ilimitada: false, temasRestantes: 2 });
     await app.close();
@@ -409,14 +455,13 @@ async function lerFixturePdf() {
   return readFileSync(path.join(aqui, 'fixtures', 'apostila.pdf'));
 }
 
-function enviarArquivo(app: FastifyInstance, corpo: Buffer, usuario = 'ana') {
+async function enviarArquivo(app: FastifyInstance, corpo: Buffer, usuario = 'ana') {
   return app.inject({
     method: 'POST',
     url: '/materias',
-    headers: {
-      'x-usuario-id': usuario,
+    headers: await cabecalhos(app, usuario, {
       'content-type': `multipart/form-data; boundary=${LIMITE}`,
-    },
+    }),
     payload: corpo,
   });
 }
@@ -438,7 +483,7 @@ describe('upload de PDF', () => {
     const m = await app.inject({
       method: 'GET',
       url: `/materias/${tarefa.resultado.materiaId}`,
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
     });
     // Nome de arquivo especifico vence o da IA: foi o aluno que escolheu.
     expect(m.json().materia.nome).toBe('Banco de Dados');
@@ -475,7 +520,7 @@ describe('nome da materia', () => {
     const m = await app.inject({
       method: 'GET',
       url: `/materias/${tarefa.resultado.materiaId}`,
-      headers: { 'x-usuario-id': 'ana' },
+      headers: await cabecalhos(app, 'ana'),
     });
     await app.close();
     return m.json().materia.nome as string;
