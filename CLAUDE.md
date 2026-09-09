@@ -16,6 +16,7 @@ UX e de lógica. Ele não é código de produção.
 npm install
 npm start            # usar: monta o app e serve tudo em http://localhost:3333
 npm run verificar    # so confere o ambiente, nao sobe nada
+npm run diagnosticar # montagem do app falhando: junta ambiente + causa real
 
 npm run dev          # desenvolver: API em :3333 (com recarga)
 npm run web          # desenvolver: app em :8081 (com recarga)

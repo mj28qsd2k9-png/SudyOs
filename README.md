@@ -81,6 +81,15 @@ Preencha `extra.apiUrl` em `apps/mobile/app.json` com o IP da sua máquina
 
 ### Quando algo der errado
 
+Se a montagem do app falhar, este comando junta o ambiente e a causa real num
+bloco só — o npm imprime o rodapé depois do erro, e quem copia o final do
+terminal manda justamente a parte que não explica nada:
+
+```bash
+npm run diagnosticar
+```
+
+
 Há um banco de testes da API em `http://localhost:3333/teste/`: cria conta, sobe
 um PDF e mostra a trilha crua, com as respostas à vista. **É ferramenta de
 diagnóstico, não o app** — serve para inspecionar o que a IA produziu.
