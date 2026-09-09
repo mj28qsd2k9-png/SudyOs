@@ -12,6 +12,47 @@ const MATERIAL = (
   'A mitocondria e a usina de energia da celula, onde os nutrientes viram ATP. '
 ).repeat(6);
 
+/**
+ * Geracao virou tarefa em segundo plano: a rota responde 202 na hora e o
+ * trabalho continua. O teste segue o mesmo caminho do app — pergunta o estado
+ * ate a tarefa terminar.
+ */
+async function aguardarTarefa(app: FastifyInstance, tarefaId: string, usuario = 'ana') {
+  for (let i = 0; i < 200; i += 1) {
+    const r = await app.inject({
+      method: 'GET',
+      url: `/tarefas/${tarefaId}`,
+      headers: { 'x-usuario-id': usuario },
+    });
+    const t = r.json();
+    if (t.estado === 'concluida' || t.estado === 'falhou') return t;
+    await new Promise((r) => setImmediate(r));
+  }
+  throw new Error('a tarefa nao terminou');
+}
+
+async function subirEEsperar(
+  app: FastifyInstance,
+  payload: unknown,
+  usuario = 'ana',
+): Promise<{ materia: any; tarefa: any }> {
+  const r = await app.inject({
+    method: 'POST',
+    url: '/materias',
+    headers: { 'x-usuario-id': usuario },
+    payload: payload as object,
+  });
+  if (r.statusCode !== 202) return { materia: null, tarefa: r.json() };
+  const tarefa = await aguardarTarefa(app, r.json().tarefaId, usuario);
+  if (tarefa.estado !== 'concluida') return { materia: null, tarefa };
+  const m = await app.inject({
+    method: 'GET',
+    url: `/materias/${tarefa.resultado.materiaId}`,
+    headers: { 'x-usuario-id': usuario },
+  });
+  return { materia: m.json().materia, tarefa };
+}
+
 function config(extra: Record<string, string> = {}) {
   return carregarConfig({ NODE_ENV: 'test', QUESTOES_POR_TEMA: '8', ...extra } as NodeJS.ProcessEnv);
 }
@@ -31,13 +72,7 @@ describe('rotas de geracao', () => {
     await app.close();
   });
 
-  const subirMaterial = (texto = MATERIAL) =>
-    app.inject({
-      method: 'POST',
-      url: '/materias',
-      headers: { 'x-usuario-id': 'ana' },
-      payload: { texto },
-    });
+  const subirMaterial = (texto = MATERIAL) => subirEEsperar(app, { texto });
 
   it('responde /saude com o modelo em uso', async () => {
     const r = await app.inject({ method: 'GET', url: '/saude' });
@@ -46,56 +81,95 @@ describe('rotas de geracao', () => {
   });
 
   it('mapeia os temas e ja entrega o primeiro pronto para jogar', async () => {
-    const r = await subirMaterial();
-    expect(r.statusCode).toBe(201);
+    const { materia, tarefa } = await subirMaterial();
+    expect(tarefa.estado).toBe('concluida');
+    expect(materia.nome).toBe('Biologia Celular');
+    expect(materia.temas).toHaveLength(2);
 
-    const corpo = r.json();
-    expect(corpo.materia.nome).toBe('Biologia Celular');
-    expect(corpo.materia.temas).toHaveLength(2);
-
-    const [primeiro, segundo] = corpo.materia.temas;
-    expect(primeiro.id).toBe(corpo.temaGerado);
+    const [primeiro, segundo] = materia.temas;
+    expect(primeiro.id).toBe(tarefa.resultado.temaId);
     expect(primeiro.aula.blocos.length).toBeGreaterThan(0);
     expect(primeiro.questoes).toHaveLength(8);
     // O segundo fica trancado: gerar custa cota, e quem decide e o aluno.
     expect(segundo.questoes).toBeNull();
   });
 
-  it('pede a aula antes dos lotes de questoes, para aquecer o cache do material', async () => {
+  it('responde na hora e faz o trabalho em segundo plano', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/materias',
+      headers: { 'x-usuario-id': 'ana' },
+      payload: { texto: MATERIAL },
+    });
+    // 202: aceito. O aluno nao fica preso numa requisicao de dois minutos.
+    expect(r.statusCode).toBe(202);
+    expect(r.json().tarefaId).toEqual(expect.any(String));
+
+    const tarefa = await aguardarTarefa(app, r.json().tarefaId);
+    expect(tarefa.estado).toBe('concluida');
+    expect(tarefa.progresso).toBe(1);
+  });
+
+  it('nao entrega a tarefa de um usuario para outro', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/materias',
+      headers: { 'x-usuario-id': 'ana' },
+      payload: { texto: MATERIAL },
+    });
+    const espiando = await app.inject({
+      method: 'GET',
+      url: `/tarefas/${r.json().tarefaId}`,
+      headers: { 'x-usuario-id': 'carla' },
+    });
+    expect(espiando.statusCode).toBe(404);
+  });
+
+  it('usa o mesmo bloco de material em todas as chamadas do tema', async () => {
     await subirMaterial();
     const doTema = falso.chamadas.filter((c) => c.nome !== 'mapa_do_material');
-
-    expect(doTema[0]!.nome).toBe('aula');
-    // Todas as chamadas do tema compartilham o mesmo bloco de material — e o
-    // prefixo identico que o cache casa.
-    const materiais = new Set(doTema.map((c) => c.material));
-    expect(materiais.size).toBe(1);
+    // Prefixo identico e o que permite o cache casar dentro de cada familia.
+    expect(new Set(doTema.map((c) => c.material)).size).toBe(1);
   });
 
   it('intercala fixacao e prova na trilha', async () => {
-    const corpo = (await subirMaterial()).json();
-    const familias = corpo.materia.temas[0].questoes.map((q: { familia: string }) => q.familia);
+    const { materia } = await subirMaterial();
+    const familias = materia.temas[0].questoes.map((q: { familia: string }) => q.familia);
     expect(familias.slice(0, 4)).toEqual(['fixacao', 'prova', 'fixacao', 'prova']);
   });
 
   it('recusa material curto demais com uma explicacao util', async () => {
-    const r = await subirMaterial('pouco texto');
+    // Validacao de entrada continua sincrona: nao faz sentido abrir tarefa
+    // para dizer que o arquivo nao serve.
+    const r = await app.inject({
+      method: 'POST',
+      url: '/materias',
+      headers: { 'x-usuario-id': 'ana' },
+      payload: { texto: 'pouco texto' },
+    });
     expect(r.statusCode).toBe(422);
     expect(r.json().erro).toMatch(/escaneado/i);
   });
 
   it('gera um tema sob demanda e nao regera o que ja existe', async () => {
-    const criada = (await subirMaterial()).json();
-    const materiaId = criada.materia.id;
-    const segundoId = criada.materia.temas[1].id;
+    const { materia } = await subirMaterial();
+    const materiaId = materia.id;
+    const segundoId = materia.temas[1].id;
 
     const r = await app.inject({
       method: 'POST',
       url: `/materias/${materiaId}/temas/${segundoId}/gerar`,
       headers: { 'x-usuario-id': 'ana' },
     });
-    expect(r.statusCode).toBe(200);
-    expect(r.json().materia.temas[1].questoes).toHaveLength(8);
+    expect(r.statusCode).toBe(202);
+    expect((await aguardarTarefa(app, r.json().tarefaId)).estado).toBe('concluida');
+
+    const atual = await app.inject({
+      method: 'GET',
+      url: `/materias/${materiaId}`,
+      headers: { 'x-usuario-id': 'ana' },
+    });
+    expect(atual.json().materia.temas[1].questoes).toHaveLength(8);
 
     const antes = falso.chamadas.length;
     const denovo = await app.inject({
@@ -103,8 +177,8 @@ describe('rotas de geracao', () => {
       url: `/materias/${materiaId}/temas/${segundoId}/gerar`,
       headers: { 'x-usuario-id': 'ana' },
     });
-    expect(denovo.statusCode).toBe(200);
-    expect(falso.chamadas.length).toBe(antes); // nao chamou a IA de novo
+    expect(denovo.statusCode).toBe(200); // ja pronto: responde sem abrir tarefa
+    expect(falso.chamadas.length).toBe(antes);
   });
 
   it('guarda a materia mesmo quando a geracao do primeiro tema falha', async () => {
@@ -117,8 +191,9 @@ describe('rotas de geracao', () => {
       headers: { 'x-usuario-id': 'bia' },
       payload: { texto: MATERIAL },
     });
-    expect(r.statusCode).toBe(207);
-    expect(r.json().temaGerado).toBeNull();
+    const tarefa = await aguardarTarefa(outro, r.json().tarefaId, 'bia');
+    expect(tarefa.estado).toBe('falhou');
+    expect(tarefa.falha.mensagem).toBeTruthy();
 
     // A materia sobrevive: da para tentar gerar de novo sem subir o PDF outra vez.
     const lista = await outro.inject({
@@ -131,10 +206,10 @@ describe('rotas de geracao', () => {
   });
 
   it('nao deixa um usuario ver a materia do outro', async () => {
-    const criada = (await subirMaterial()).json();
+    const { materia } = await subirMaterial();
     const r = await app.inject({
       method: 'GET',
-      url: `/materias/${criada.materia.id}`,
+      url: `/materias/${materia.id}`,
       headers: { 'x-usuario-id': 'carla' },
     });
     expect(r.statusCode).toBe(404);
@@ -178,14 +253,8 @@ describe('conclusao de tema', () => {
   });
 
   async function temaPronto() {
-    const r = await app.inject({
-      method: 'POST',
-      url: '/materias',
-      headers: { 'x-usuario-id': 'ana' },
-      payload: { texto: MATERIAL },
-    });
-    const corpo = r.json();
-    return { materiaId: corpo.materia.id, tema: corpo.materia.temas[0] };
+    const { materia } = await subirEEsperar(app, { texto: MATERIAL });
+    return { materiaId: materia.id, tema: materia.temas[0] };
   }
 
   it('corrige no servidor: o cliente manda respostas, nao o placar', async () => {
@@ -247,20 +316,14 @@ describe('conclusao de tema', () => {
   });
 
   it('recusa concluir um tema que ainda nao foi gerado', async () => {
-    const r = await app.inject({
-      method: 'POST',
-      url: '/materias',
-      headers: { 'x-usuario-id': 'ana' },
-      payload: { texto: MATERIAL },
-    });
-    const corpo = r.json();
-    const naoGerado = corpo.materia.temas[1];
+    const { materia } = await subirEEsperar(app, { texto: MATERIAL });
+    const naoGerado = materia.temas[1];
 
     const conclusao = await app.inject({
       method: 'POST',
       url: '/progresso/concluir',
       headers: { 'x-usuario-id': 'ana' },
-      payload: { materiaId: corpo.materia.id, temaId: naoGerado.id, respostas: [] },
+      payload: { materiaId: materia.id, temaId: naoGerado.id, respostas: [] },
     });
     expect(conclusao.statusCode).toBe(409);
   });
@@ -325,45 +388,61 @@ describe('cota no perfil', () => {
   });
 });
 
+const LIMITE = '----teste';
+
+function multipart(conteudo: Buffer, nomeArquivo: string, tipo = 'application/pdf') {
+  return Buffer.concat([
+    Buffer.from(
+      `--${LIMITE}\r\nContent-Disposition: form-data; name="arquivo"; ` +
+        `filename="${nomeArquivo}"\r\nContent-Type: ${tipo}\r\n\r\n`,
+    ),
+    conteudo,
+    Buffer.from(`\r\n--${LIMITE}--\r\n`),
+  ]);
+}
+
+async function lerFixturePdf() {
+  const { readFileSync } = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const aqui = path.dirname(fileURLToPath(import.meta.url));
+  return readFileSync(path.join(aqui, 'fixtures', 'apostila.pdf'));
+}
+
+function enviarArquivo(app: FastifyInstance, corpo: Buffer, usuario = 'ana') {
+  return app.inject({
+    method: 'POST',
+    url: '/materias',
+    headers: {
+      'x-usuario-id': usuario,
+      'content-type': `multipart/form-data; boundary=${LIMITE}`,
+    },
+    payload: corpo,
+  });
+}
+
 describe('upload de PDF', () => {
   it('aceita o PDF em multipart e extrai o texto no servidor', async () => {
-    const { readFileSync } = await import('node:fs');
-    const path = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const aqui = path.dirname(fileURLToPath(import.meta.url));
-    const pdf = readFileSync(path.join(aqui, 'fixtures', 'apostila.pdf'));
-
-    const falso = criarGeradorFalso();
     const app = await criarApp({
       config: config(),
       repo: new RepositorioMemoria(),
-      gerador: falso.gerador,
+      gerador: criarGeradorFalso().gerador,
     });
 
-    const limite = '----teste';
-    const corpo = Buffer.concat([
-      Buffer.from(
-        `--${limite}\r\nContent-Disposition: form-data; name="arquivo"; ` +
-          `filename="Banco de Dados.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
-      ),
-      pdf,
-      Buffer.from(`\r\n--${limite}--\r\n`),
-    ]);
+    const r = await enviarArquivo(app, multipart(await lerFixturePdf(), 'Banco de Dados.pdf'));
+    expect(r.statusCode).toBe(202);
 
-    const r = await app.inject({
-      method: 'POST',
-      url: '/materias',
-      headers: {
-        'x-usuario-id': 'ana',
-        'content-type': `multipart/form-data; boundary=${limite}`,
-      },
-      payload: corpo,
+    const tarefa = await aguardarTarefa(app, r.json().tarefaId);
+    expect(tarefa.estado).toBe('concluida');
+
+    const m = await app.inject({
+      method: 'GET',
+      url: `/materias/${tarefa.resultado.materiaId}`,
+      headers: { 'x-usuario-id': 'ana' },
     });
-
-    expect(r.statusCode).toBe(201);
     // Nome de arquivo especifico vence o da IA: foi o aluno que escolheu.
-    expect(r.json().materia.nome).toBe('Banco de Dados');
-    expect(r.json().materia.temas[0].questoes).toHaveLength(8);
+    expect(m.json().materia.nome).toBe('Banco de Dados');
+    expect(m.json().materia.temas[0].questoes).toHaveLength(8);
     await app.close();
   });
 
@@ -374,26 +453,10 @@ describe('upload de PDF', () => {
       gerador: criarGeradorFalso().gerador,
     });
 
-    const limite = '----teste';
-    const corpo = Buffer.concat([
-      Buffer.from(
-        `--${limite}\r\nContent-Disposition: form-data; name="arquivo"; ` +
-          `filename="nota.txt"\r\nContent-Type: text/plain\r\n\r\n`,
-      ),
-      Buffer.from('a'.repeat(500)),
-      Buffer.from(`\r\n--${limite}--\r\n`),
-    ]);
-
-    const r = await app.inject({
-      method: 'POST',
-      url: '/materias',
-      headers: {
-        'x-usuario-id': 'ana',
-        'content-type': `multipart/form-data; boundary=${limite}`,
-      },
-      payload: corpo,
-    });
-
+    const r = await enviarArquivo(
+      app,
+      multipart(Buffer.from('a'.repeat(500)), 'nota.txt', 'text/plain'),
+    );
     expect(r.statusCode).toBe(422);
     expect(r.json()).toMatchObject({ codigo: 'nao_e_pdf', adiantaTentarDeNovo: false });
     await app.close();
@@ -402,44 +465,31 @@ describe('upload de PDF', () => {
 
 describe('nome da materia', () => {
   const enviarPdf = async (nomeArquivo: string) => {
-    const { readFileSync } = await import('node:fs');
-    const path = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
-    const aqui = path.dirname(fileURLToPath(import.meta.url));
-    const pdf = readFileSync(path.join(aqui, 'fixtures', 'apostila.pdf'));
     const app = await criarApp({
       config: config(),
       repo: new RepositorioMemoria(),
       gerador: criarGeradorFalso().gerador,
     });
-    const limite = '----t';
-    const corpo = Buffer.concat([
-      Buffer.from(
-        `--${limite}\r\nContent-Disposition: form-data; name="arquivo"; ` +
-          `filename="${nomeArquivo}"\r\nContent-Type: application/pdf\r\n\r\n`,
-      ),
-      pdf,
-      Buffer.from(`\r\n--${limite}--\r\n`),
-    ]);
-    const r = await app.inject({
-      method: 'POST',
-      url: '/materias',
-      headers: { 'x-usuario-id': 'ana', 'content-type': `multipart/form-data; boundary=${limite}` },
-      payload: corpo,
+    const r = await enviarArquivo(app, multipart(await lerFixturePdf(), nomeArquivo));
+    const tarefa = await aguardarTarefa(app, r.json().tarefaId);
+    const m = await app.inject({
+      method: 'GET',
+      url: `/materias/${tarefa.resultado.materiaId}`,
+      headers: { 'x-usuario-id': 'ana' },
     });
     await app.close();
-    return r.json().materia.nome as string;
+    return m.json().materia.nome as string;
   };
 
   // O gerador falso sempre chama a materia de "Biologia Celular".
   it.each([
-    ['apostila.pdf', 'Biologia Celular'],
-    ['scan_02.pdf', 'Biologia Celular'],
-    ['Documento (1).pdf', 'Biologia Celular'],
-    ['20240513_1032.pdf', 'Biologia Celular'],
-    ['sem titulo.pdf', 'Biologia Celular'],
-  ])('descarta nome generico de arquivo: %s', async (arquivo, esperado) => {
-    expect(await enviarPdf(arquivo)).toBe(esperado);
+    ['apostila.pdf'],
+    ['scan_02.pdf'],
+    ['Documento (1).pdf'],
+    ['20240513_1032.pdf'],
+    ['sem titulo.pdf'],
+  ])('descarta nome generico de arquivo: %s', async (arquivo) => {
+    expect(await enviarPdf(arquivo)).toBe('Biologia Celular');
   });
 
   it.each([['Direito Constitucional II.pdf'], ['Calculo 1 - prova 2.pdf']])(

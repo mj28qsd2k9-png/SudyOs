@@ -13,6 +13,7 @@ import {
 } from '../material/texto.js';
 import { ErroPdf, extrairTextoDoPdf, MAX_BYTES_PDF } from '../material/pdf.js';
 import { comTemaGerado, type Repositorio } from '../infra/repositorio.js';
+import type { FalhaTarefa, FilaTarefas } from '../dominio/tarefas.js';
 import { identificar } from './contexto.js';
 
 /**
@@ -84,11 +85,20 @@ function nomeDaMateria(doArquivo: string | undefined, daIA: string): string {
 export type DependenciasRotas = {
   repo: Repositorio;
   gerador: GeradorIA;
+  fila: FilaTarefas;
   questoesPorTema: number;
 };
 
 export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRotas) {
-  const { repo, gerador, questoesPorTema } = deps;
+  const { repo, gerador, fila, questoesPorTema } = deps;
+
+  app.get('/tarefas/:tarefaId', async (req, reply) => {
+    const { usuarioId } = identificar(req);
+    const { tarefaId } = req.params as { tarefaId: string };
+    const tarefa = fila.obter(tarefaId, usuarioId);
+    if (!tarefa) return reply.code(404).send({ erro: 'Tarefa nao encontrada.' });
+    return tarefa;
+  });
 
   app.get('/materias', async (req) => {
     const { usuarioId } = identificar(req);
@@ -151,58 +161,65 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
     }
 
     const blocos = fatiar(texto);
+    const tarefa = fila.criar(usuarioId, 'Destrinchando o material...');
 
-    let mapa;
-    try {
-      mapa = await mapearMaterial(gerador, blocos);
-    } catch (erro) {
-      return reply.code(502).send(responderErro(reply, erro, 'mapear material'));
-    }
+    fila.executar(
+      tarefa.id,
+      async () => {
+        fila.andar(tarefa.id, 'Mapeando os temas...', 0.15);
+        const mapa = await mapearMaterial(gerador, blocos);
 
-    const materiaId = randomUUID();
-    const materia: Materia = MateriaSchema.parse({
-      id: materiaId,
-      nome: nomeDaMateria(recebido.nome, mapa.nome),
-      cor: PALETA[(await repo.listarMaterias(usuarioId)).length % PALETA.length],
-      criadaEm: new Date().toISOString(),
-      temas: mapa.temas.map((t) => ({
-        id: randomUUID(),
-        nome: t.nome,
-        conceito: t.conceito,
-        chave: t.chave,
-        aula: null,
-        questoes: null,
-      })),
-    });
+        const materiaId = randomUUID();
+        const materia: Materia = MateriaSchema.parse({
+          id: materiaId,
+          nome: nomeDaMateria(recebido.nome, mapa.nome),
+          cor: PALETA[(await repo.listarMaterias(usuarioId)).length % PALETA.length],
+          criadaEm: new Date().toISOString(),
+          temas: mapa.temas.map((t) => ({
+            id: randomUUID(),
+            nome: t.nome,
+            conceito: t.conceito,
+            chave: t.chave,
+            aula: null,
+            questoes: null,
+          })),
+        });
 
-    await repo.salvarBlocos(usuarioId, materiaId, blocos);
-    await repo.salvarMateria(usuarioId, materia);
+        // Salva antes de gerar: se a geracao falhar, a materia e os temas
+        // sobrevivem e o aluno tenta de novo sem subir o PDF outra vez.
+        await repo.salvarBlocos(usuarioId, materiaId, blocos);
+        await repo.salvarMateria(usuarioId, materia);
 
-    const primeiro = materia.temas[0]!;
-    try {
-      const trilha = await gerarTrilha(gerador, blocos, primeiro, questoesPorTema);
-      const atualizada = comTemaGerado(materia, primeiro.id, trilha);
-      await repo.salvarMateria(usuarioId, atualizada);
+        const primeiro = materia.temas[0]!;
+        fila.andar(tarefa.id, `Preparando a aula de ${primeiro.nome}...`, 0.3);
 
-      usuario.cota.questoesUsadas += questoesPorTema;
-      await repo.salvarUsuario(usuario);
+        const trilha = await gerarTrilha(
+          gerador,
+          blocos,
+          primeiro,
+          questoesPorTema,
+          (feitas, total) =>
+            fila.andar(
+              tarefa.id,
+              feitas < total ? 'Criando os exercicios...' : 'Fechando a trilha...',
+              0.3 + 0.65 * (feitas / total),
+            ),
+        );
+        await repo.salvarMateria(usuarioId, comTemaGerado(materia, primeiro.id, trilha));
 
-      return reply.code(201).send({
-        materia: atualizada,
-        temaGerado: primeiro.id,
-        custoUSD: Number((mapa.custo.totalUSD + trilha.custo.totalUSD).toFixed(4)),
-        cota: usuario.cota,
-      });
-    } catch (erro) {
-      // O mapeamento vale: a materia fica salva com os temas por gerar, e o
-      // aluno pode tentar gerar o primeiro tema de novo sem subir o PDF outra vez.
-      return reply.code(207).send({
-        materia,
-        temaGerado: null,
-        ...responderErro(reply, erro, 'gerar primeiro tema'),
-        cota: usuario.cota,
-      });
-    }
+        usuario.cota.questoesUsadas += questoesPorTema;
+        await repo.salvarUsuario(usuario);
+
+        return {
+          materiaId,
+          temaId: primeiro.id,
+          custoUSD: Number((mapa.custo.totalUSD + trilha.custo.totalUSD).toFixed(4)),
+        };
+      },
+      (erro) => responderErro(reply, erro, 'gerar materia'),
+    );
+
+    return reply.code(202).send({ tarefaId: tarefa.id, cota: usuario.cota });
   });
 
   /** Gera a trilha de um tema. E aqui que a cota e consumida. */
@@ -229,24 +246,38 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
       return reply.code(402).send({ erro: 'Cota do mes esgotada.', cota: usuario.cota });
     }
 
-    try {
-      const trilha = await gerarTrilha(gerador, blocos, tema, questoesPorTema);
-      const atualizada = comTemaGerado(materia, temaId, trilha);
-      await repo.salvarMateria(usuarioId, atualizada);
+    const tarefa = fila.criar(usuarioId, `Preparando a aula de ${tema.nome}...`);
+    fila.executar(
+      tarefa.id,
+      async () => {
+        fila.andar(tarefa.id, `Preparando a aula de ${tema.nome}...`, 0.1);
+        const trilha = await gerarTrilha(
+          gerador,
+          blocos,
+          tema,
+          questoesPorTema,
+          (feitas, total) =>
+            fila.andar(
+              tarefa.id,
+              feitas < total ? 'Criando os exercicios...' : 'Fechando a trilha...',
+              0.1 + 0.85 * (feitas / total),
+            ),
+        );
+        await repo.salvarMateria(usuarioId, comTemaGerado(materia, temaId, trilha));
 
-      usuario.cota.questoesUsadas += questoesPorTema;
-      await repo.salvarUsuario(usuario);
+        usuario.cota.questoesUsadas += questoesPorTema;
+        await repo.salvarUsuario(usuario);
 
-      return reply.send({
-        materia: atualizada,
-        temaGerado: temaId,
-        custoUSD: Number(trilha.custo.totalUSD.toFixed(4)),
-        descartadas: trilha.descartadas,
-        cota: usuario.cota,
-      });
-    } catch (erro) {
-      return reply.code(502).send(responderErro(reply, erro, 'gerar tema'));
-    }
+        return {
+          materiaId,
+          temaId,
+          custoUSD: Number(trilha.custo.totalUSD.toFixed(4)),
+        };
+      },
+      (erro) => responderErro(reply, erro, 'gerar tema'),
+    );
+
+    return reply.code(202).send({ tarefaId: tarefa.id, cota: usuario.cota });
   });
 }
 
@@ -256,16 +287,12 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
  * O log leva o erro inteiro: e a unica copia da causa, e sem ela o dono do app
  * fica com uma mensagem generica e nenhuma pista.
  */
-function responderErro(
-  reply: FastifyReply,
-  erro: unknown,
-  onde: string,
-): { erro: string; codigo: string; adiantaTentarDeNovo: boolean } {
+function responderErro(reply: FastifyReply, erro: unknown, onde: string): FalhaTarefa {
   if (erro instanceof ErroGeracao) {
     reply.log.warn({ onde, causa: erro.causa }, erro.message);
-    return { erro: erro.message, codigo: 'resposta_invalida', adiantaTentarDeNovo: true };
+    return { mensagem: erro.message, codigo: 'resposta_invalida', adiantaTentarDeNovo: true };
   }
   const d = descreverErro(erro);
   reply.log.error({ onde, codigo: d.codigo, detalhe: d.detalhe, err: erro }, d.mensagem);
-  return { erro: d.mensagem, codigo: d.codigo, adiantaTentarDeNovo: d.adiantaTentarDeNovo };
+  return { mensagem: d.mensagem, codigo: d.codigo, adiantaTentarDeNovo: d.adiantaTentarDeNovo };
 }

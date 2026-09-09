@@ -107,11 +107,14 @@ export type TrilhaGerada = {
  * frentes escreveram tres entradas de tamanhos diferentes). Por isso o material
  * so e marcado para cache quando a familia tem mais de um lote para ler de volta.
  */
+export type AoAndar = (feitas: number, total: number) => void;
+
 export async function gerarTrilha(
   gerador: GeradorIA,
   blocos: string[],
   tema: Pick<Tema, 'nome' | 'chave'>,
   alvoQuestoes: number,
+  aoAndar?: AoAndar,
 ): Promise<TrilhaGerada> {
   const material = blocoMaterial(trechoRelevante(blocos, tema));
   const custos: Custo[] = [];
@@ -130,9 +133,11 @@ export async function gerarTrilha(
         esforco: 'medium',
       });
       custos.push(r.custo);
+      andou();
       const validada = AulaSchema.safeParse(r.dados);
       return validada.success ? validada.data : null;
     } catch (erro) {
+      andou();
       // Tema sem aula ainda e jogavel; o cliente cai direto no conceito curto.
       falhas.push(erro);
       return null;
@@ -142,6 +147,16 @@ export async function gerarTrilha(
   // Metade prova, metade fixacao, em lotes.
   const alvoProva = Math.ceil(alvoQuestoes / 2);
   const alvoFixacao = alvoQuestoes - alvoProva;
+
+  // A tela de espera fica 1 a 2 minutos no ar. Uma barra parada nesse tempo
+  // parece travada, entao cada chamada que volta move o progresso — inclusive
+  // as que falharam, porque o que a barra mede e quanto falta, nao quanto deu certo.
+  const totalChamadas = 1 + dividirEmLotes(alvoProva).length + dividirEmLotes(alvoFixacao).length;
+  let feitas = 0;
+  const andou = () => {
+    feitas += 1;
+    aoAndar?.(feitas, totalChamadas);
+  };
 
   let brutasProva = 0;
   let brutasFixacao = 0;
@@ -161,6 +176,7 @@ export async function gerarTrilha(
           cachearMaterial: lotes.length > 1,
         });
         custos.push(r.custo);
+        andou();
         brutasProva += r.dados.questoes.length;
         for (const bruta of r.dados.questoes) {
           const q = normalizarQuestao(bruta, 'prova');
@@ -168,6 +184,7 @@ export async function gerarTrilha(
         }
       } catch (erro) {
         // Um lote perdido nao invalida os outros.
+        andou();
         falhas.push(erro);
       }
     }
@@ -189,6 +206,7 @@ export async function gerarTrilha(
           cachearMaterial: lotes.length > 1,
         });
         custos.push(r.custo);
+        andou();
         brutasFixacao += r.dados.questoes.length;
         for (const bruta of r.dados.questoes) {
           const q = normalizarQuestao(bruta, 'fixacao');
@@ -196,6 +214,7 @@ export async function gerarTrilha(
         }
       } catch (erro) {
         // Idem.
+        andou();
         falhas.push(erro);
       }
     }

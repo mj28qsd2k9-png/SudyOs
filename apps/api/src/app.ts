@@ -10,6 +10,7 @@ import { RepositorioMemoria, type Repositorio } from './infra/repositorio.js';
 import { rotasMaterias } from './rotas/materias.js';
 import { rotasProgresso } from './rotas/progresso.js';
 import { MAX_BYTES_PDF } from './material/pdf.js';
+import { FilaTarefas } from './dominio/tarefas.js';
 
 export type OpcoesApp = {
   config: Config;
@@ -37,6 +38,7 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
   });
 
   const repo = opcoes.repo ?? new RepositorioMemoria();
+  const fila = new FilaTarefas();
   const gerador =
     opcoes.gerador ??
     criarGerador({
@@ -72,10 +74,16 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
     await rotasMaterias(instancia, {
       repo,
       gerador,
+      fila,
       questoesPorTema: config.questoesPorTema,
     });
     await rotasProgresso(instancia, { repo });
   });
+
+  // Tarefa concluida vira lixo depois de um tempo; sem isso a memoria so cresce.
+  const faxina = setInterval(() => fila.limpar(), 15 * 60 * 1000);
+  faxina.unref();
+  app.addHook('onClose', async () => clearInterval(faxina));
 
   // Cliente de teste: sobe um PDF no navegador e exercita a API de ponta a ponta.
   const aqui = path.dirname(fileURLToPath(import.meta.url));
