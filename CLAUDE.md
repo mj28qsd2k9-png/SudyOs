@@ -14,12 +14,16 @@ UX e de lógica. Ele não é código de produção.
 
 ```bash
 npm install
-npm run build --workspace @estudaai/shared   # o app/api importam o dist
 npm run dev          # API em http://localhost:3333, banco de testes em /teste/
-npm run mobile       # o app (Expo)
+npm run web          # o app no navegador, em http://localhost:8081
+npm run mobile       # o app no celular (Expo Go, QR)
 npm test             # vitest, nenhum teste toca a rede
 npm run typecheck
 ```
+
+`dev`, `web` e `mobile` ja compilam `@estudaai/shared` antes de subir: o app e a
+API importam o `dist`, e esquecer disso da um erro de modulo que nao parece com
+"voce esqueceu de compilar".
 
 O `.env` da raiz e lido pelo `--env-file-if-exists` do Node, sem dotenv.
 

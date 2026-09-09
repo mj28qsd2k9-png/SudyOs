@@ -13,10 +13,11 @@
     "node": ">=20.11"
   },
   "scripts": {
+    "dev": "npm run build --workspace @estudaai/shared && npm run dev --workspace @estudaai/api",
+    "web": "npm run build --workspace @estudaai/shared && npm run web --workspace @estudaai/mobile",
+    "mobile": "npm run build --workspace @estudaai/shared && npm run start --workspace @estudaai/mobile",
     "build": "npm run build --workspaces --if-present",
-    "dev": "npm run dev --workspace @estudaai/api",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "mobile": "npm run start --workspace @estudaai/mobile"
+    "typecheck": "npm run typecheck --workspaces --if-present"
   }
 }
