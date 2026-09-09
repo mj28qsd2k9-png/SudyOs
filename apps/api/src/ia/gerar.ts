@@ -115,6 +115,9 @@ export async function gerarTrilha(
 ): Promise<TrilhaGerada> {
   const material = blocoMaterial(trechoRelevante(blocos, tema));
   const custos: Custo[] = [];
+  // Falha de lote nao derruba o tema, mas nao pode sumir: se no fim sobrou
+  // pouca coisa, e ela que explica o porque.
+  const falhas: unknown[] = [];
 
   const rodarAula = async (): Promise<Aula | null> => {
     try {
@@ -129,8 +132,9 @@ export async function gerarTrilha(
       custos.push(r.custo);
       const validada = AulaSchema.safeParse(r.dados);
       return validada.success ? validada.data : null;
-    } catch {
+    } catch (erro) {
       // Tema sem aula ainda e jogavel; o cliente cai direto no conceito curto.
+      falhas.push(erro);
       return null;
     }
   };
@@ -162,8 +166,9 @@ export async function gerarTrilha(
           const q = normalizarQuestao(bruta, 'prova');
           if (q) saida.push(q);
         }
-      } catch {
+      } catch (erro) {
         // Um lote perdido nao invalida os outros.
+        falhas.push(erro);
       }
     }
     return saida;
@@ -189,8 +194,9 @@ export async function gerarTrilha(
           const q = normalizarQuestao(bruta, 'fixacao');
           if (q) saida.push(q);
         }
-      } catch {
+      } catch (erro) {
         // Idem.
+        falhas.push(erro);
       }
     }
     return saida;
@@ -207,6 +213,9 @@ export async function gerarTrilha(
   const descartadas = brutasProva + brutasFixacao - questoes.length;
 
   if (questoes.length < Math.ceil(alvoQuestoes * APROVEITAMENTO_MINIMO)) {
+    // Se houve falha de chamada, a causa dela e mais util do que a contagem:
+    // "sem credito" e "a IA devolveu questao quebrada" pedem acoes diferentes.
+    if (falhas.length > 0) throw falhas[0];
     throw new ErroGeracao(
       `A IA so produziu ${questoes.length} questoes utilizaveis de ${alvoQuestoes}. Tente de novo.`,
     );

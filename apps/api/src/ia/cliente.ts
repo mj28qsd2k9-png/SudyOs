@@ -3,6 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import { calcularCusto, type Custo, type ModeloId } from './modelo.js';
 import { extrairJSON } from './json.js';
+import { ehRecusaDeEsquema } from './erros.js';
 import { PREAMBULO } from './prompts.js';
 
 export type Esforco = 'low' | 'medium' | 'high';
@@ -137,13 +138,14 @@ export function criarGerador(opcoes: OpcoesGerador): GeradorIA {
       opcoes.aoUsar?.({ custo, fallback: false, nomeEsquema: pedido.nomeEsquema });
       return { dados: resposta.parsed_output as T, custo, fallback: false };
     } catch (erro) {
-      // Um 400 aqui quase sempre significa "este esquema/modelo nao aceita
-      // structured output". Nesse caso vale tentar em texto livre em vez de
-      // derrubar a geracao inteira; qualquer outro erro sobe.
-      if (!(erro instanceof Anthropic.BadRequestError) && !(erro instanceof ErroGeracao)) {
-        throw erro;
+      // So cai para texto livre quando o problema e o structured output. Antes
+      // qualquer 400 vinha para ca — inclusive saldo insuficiente e modelo
+      // errado — e o fallback so gastava outra chamada para falhar igual, com
+      // uma mensagem generica no fim. Erro que o fallback nao resolve, sobe.
+      if (erro instanceof ErroGeracao || ehRecusaDeEsquema(erro)) {
+        return gerarPorTexto(pedido, comum, erro);
       }
-      return gerarPorTexto(pedido, comum, erro);
+      throw erro;
     }
   }
 

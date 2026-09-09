@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import multipart from '@fastify/multipart';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { Config } from './config.js';
@@ -8,6 +9,7 @@ import { criarGerador, type GeradorIA } from './ia/cliente.js';
 import { RepositorioMemoria, type Repositorio } from './infra/repositorio.js';
 import { rotasMaterias } from './rotas/materias.js';
 import { rotasProgresso } from './rotas/progresso.js';
+import { MAX_BYTES_PDF } from './material/pdf.js';
 
 export type OpcoesApp = {
   config: Config;
@@ -22,7 +24,13 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
     logger: config.ambiente === 'test' ? false : { level: 'info' },
     // Geracao e varias chamadas de IA em sequencia; o padrao de 5s nao cabe.
     requestTimeout: 180_000,
+    // O padrao do Fastify e 1 MB. Texto de uma apostila de 100 paginas passa
+    // disso, e o 413 resultante nao explica nada para quem so subiu um PDF.
+    bodyLimit: 8 * 1024 * 1024,
   });
+
+  // O app manda o PDF; o backend extrai o texto (React Native nao roda pdf.js).
+  await app.register(multipart, { limits: { fileSize: MAX_BYTES_PDF, files: 1 } });
 
   await app.register(cors, {
     origin: config.corsOrigens.length > 0 ? config.corsOrigens : true,

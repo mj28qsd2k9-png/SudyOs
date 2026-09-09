@@ -324,3 +324,128 @@ describe('cota no perfil', () => {
     await app.close();
   });
 });
+
+describe('upload de PDF', () => {
+  it('aceita o PDF em multipart e extrai o texto no servidor', async () => {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const aqui = path.dirname(fileURLToPath(import.meta.url));
+    const pdf = readFileSync(path.join(aqui, 'fixtures', 'apostila.pdf'));
+
+    const falso = criarGeradorFalso();
+    const app = await criarApp({
+      config: config(),
+      repo: new RepositorioMemoria(),
+      gerador: falso.gerador,
+    });
+
+    const limite = '----teste';
+    const corpo = Buffer.concat([
+      Buffer.from(
+        `--${limite}\r\nContent-Disposition: form-data; name="arquivo"; ` +
+          `filename="Banco de Dados.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
+      ),
+      pdf,
+      Buffer.from(`\r\n--${limite}--\r\n`),
+    ]);
+
+    const r = await app.inject({
+      method: 'POST',
+      url: '/materias',
+      headers: {
+        'x-usuario-id': 'ana',
+        'content-type': `multipart/form-data; boundary=${limite}`,
+      },
+      payload: corpo,
+    });
+
+    expect(r.statusCode).toBe(201);
+    // Nome de arquivo especifico vence o da IA: foi o aluno que escolheu.
+    expect(r.json().materia.nome).toBe('Banco de Dados');
+    expect(r.json().materia.temas[0].questoes).toHaveLength(8);
+    await app.close();
+  });
+
+  it('recusa um arquivo que nao e PDF com codigo acionavel', async () => {
+    const app = await criarApp({
+      config: config(),
+      repo: new RepositorioMemoria(),
+      gerador: criarGeradorFalso().gerador,
+    });
+
+    const limite = '----teste';
+    const corpo = Buffer.concat([
+      Buffer.from(
+        `--${limite}\r\nContent-Disposition: form-data; name="arquivo"; ` +
+          `filename="nota.txt"\r\nContent-Type: text/plain\r\n\r\n`,
+      ),
+      Buffer.from('a'.repeat(500)),
+      Buffer.from(`\r\n--${limite}--\r\n`),
+    ]);
+
+    const r = await app.inject({
+      method: 'POST',
+      url: '/materias',
+      headers: {
+        'x-usuario-id': 'ana',
+        'content-type': `multipart/form-data; boundary=${limite}`,
+      },
+      payload: corpo,
+    });
+
+    expect(r.statusCode).toBe(422);
+    expect(r.json()).toMatchObject({ codigo: 'nao_e_pdf', adiantaTentarDeNovo: false });
+    await app.close();
+  });
+});
+
+describe('nome da materia', () => {
+  const enviarPdf = async (nomeArquivo: string) => {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const aqui = path.dirname(fileURLToPath(import.meta.url));
+    const pdf = readFileSync(path.join(aqui, 'fixtures', 'apostila.pdf'));
+    const app = await criarApp({
+      config: config(),
+      repo: new RepositorioMemoria(),
+      gerador: criarGeradorFalso().gerador,
+    });
+    const limite = '----t';
+    const corpo = Buffer.concat([
+      Buffer.from(
+        `--${limite}\r\nContent-Disposition: form-data; name="arquivo"; ` +
+          `filename="${nomeArquivo}"\r\nContent-Type: application/pdf\r\n\r\n`,
+      ),
+      pdf,
+      Buffer.from(`\r\n--${limite}--\r\n`),
+    ]);
+    const r = await app.inject({
+      method: 'POST',
+      url: '/materias',
+      headers: { 'x-usuario-id': 'ana', 'content-type': `multipart/form-data; boundary=${limite}` },
+      payload: corpo,
+    });
+    await app.close();
+    return r.json().materia.nome as string;
+  };
+
+  // O gerador falso sempre chama a materia de "Biologia Celular".
+  it.each([
+    ['apostila.pdf', 'Biologia Celular'],
+    ['scan_02.pdf', 'Biologia Celular'],
+    ['Documento (1).pdf', 'Biologia Celular'],
+    ['20240513_1032.pdf', 'Biologia Celular'],
+    ['sem titulo.pdf', 'Biologia Celular'],
+  ])('descarta nome generico de arquivo: %s', async (arquivo, esperado) => {
+    expect(await enviarPdf(arquivo)).toBe(esperado);
+  });
+
+  it.each([['Direito Constitucional II.pdf'], ['Calculo 1 - prova 2.pdf']])(
+    'mantem nome especifico do aluno: %s',
+    async (arquivo) => {
+      expect(await enviarPdf(arquivo)).toBe(arquivo.replace(/\.pdf$/i, ''));
+    },
+  );
+});

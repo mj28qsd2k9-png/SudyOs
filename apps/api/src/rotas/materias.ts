@@ -1,9 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { MateriaSchema, temasRestantes, type Materia } from '@estudaai/shared';
 import { ErroGeracao, type GeradorIA } from '../ia/cliente.js';
+import { descreverErro } from '../ia/erros.js';
 import { gerarTrilha, mapearMaterial } from '../ia/gerar.js';
 import {
   fatiar,
@@ -11,8 +11,46 @@ import {
   MIN_CARACTERES_MATERIAL,
   normalizarMaterial,
 } from '../material/texto.js';
+import { ErroPdf, extrairTextoDoPdf, MAX_BYTES_PDF } from '../material/pdf.js';
 import { comTemaGerado, type Repositorio } from '../infra/repositorio.js';
 import { identificar } from './contexto.js';
+
+/**
+ * O material pode chegar de dois jeitos: o PDF em si (o que o app faz) ou o
+ * texto ja extraido (o que o banco de testes e os scripts fazem). Os dois
+ * desembocam no mesmo lugar.
+ */
+type MaterialRecebido = { texto: string; nome?: string; paginas?: number };
+
+async function lerMaterial(req: FastifyRequest): Promise<MaterialRecebido> {
+  if (req.isMultipart()) {
+    const arquivo = await req.file({ limits: { fileSize: MAX_BYTES_PDF } });
+    if (!arquivo) throw new ErroPdf('Nenhum arquivo enviado.', 'nao_e_pdf');
+    const dados = new Uint8Array(await arquivo.toBuffer());
+    const extraido = await extrairTextoDoPdf(dados);
+    return {
+      texto: extraido.texto,
+      nome: arquivo.filename?.replace(/\.pdf$/i, '').trim() || undefined,
+      paginas: extraido.paginasLidas,
+    };
+  }
+
+  const corpo = CorpoNovaMateria.safeParse(req.body);
+  if (!corpo.success) {
+    throw new ErroCorpo('Envie um PDF (multipart) ou { texto } em JSON.', corpo.error.issues);
+  }
+  return { texto: corpo.data.texto, nome: corpo.data.nome };
+}
+
+class ErroCorpo extends Error {
+  constructor(
+    message: string,
+    readonly detalhe?: unknown,
+  ) {
+    super(message);
+    this.name = 'ErroCorpo';
+  }
+}
 
 const CorpoNovaMateria = z.object({
   /**
@@ -24,6 +62,24 @@ const CorpoNovaMateria = z.object({
 });
 
 const PALETA = ['#E8501A', '#2FA36B', '#3BA9E0', '#FF7A45', '#B83C10'];
+
+/**
+ * Nome de arquivo generico nao diz nada ao aluno. "apostila.pdf", "scan_02.pdf"
+ * e "Documento (1).pdf" perdem para o nome que a IA leu do conteudo.
+ */
+const NOMES_GENERICOS =
+  // `\b` nao serve aqui: `_` conta como caractere de palavra, entao "scan_02"
+  // nao teria fronteira depois de "scan". A checagem e "nao vem outra letra".
+  /^(apostila|material|documento|document|aula|slides?|resumo|texto|arquivo|scanner|scan|digitalizado|untitled|sem[\s_-]?titulo|doc|pdf|download|file|img|imagem|new)(?![a-z])/i;
+
+function nomeDaMateria(doArquivo: string | undefined, daIA: string): string {
+  const arquivo = doArquivo?.trim();
+  if (!arquivo) return daIA;
+  if (NOMES_GENERICOS.test(arquivo)) return daIA;
+  // "20240513_1032" e afins: numero nao e nome de materia.
+  if (!/[a-z]{3}/i.test(arquivo)) return daIA;
+  return arquivo;
+}
 
 export type DependenciasRotas = {
   repo: Repositorio;
@@ -56,23 +112,37 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
    */
   app.post('/materias', async (req, reply) => {
     const { usuarioId, fuso } = identificar(req);
-    const corpo = CorpoNovaMateria.safeParse(req.body);
-    if (!corpo.success) {
-      return reply.code(400).send({ erro: 'Corpo invalido.', detalhe: corpo.error.issues });
+
+    let recebido: MaterialRecebido;
+    try {
+      recebido = await lerMaterial(req);
+    } catch (erro) {
+      if (erro instanceof ErroPdf) {
+        req.log.warn({ codigo: erro.codigo }, erro.message);
+        return reply
+          .code(erro.codigo === 'pdf_grande' ? 413 : 422)
+          .send({ erro: erro.message, codigo: erro.codigo, adiantaTentarDeNovo: false });
+      }
+      if (erro instanceof ErroCorpo) {
+        return reply.code(400).send({ erro: erro.message, detalhe: erro.detalhe });
+      }
+      throw erro;
     }
 
-    const texto = normalizarMaterial(corpo.data.texto);
+    const texto = normalizarMaterial(recebido.texto);
     if (texto.length < MIN_CARACTERES_MATERIAL) {
       return reply.code(422).send({
         erro:
           'Esse material tem pouco texto (pode ser um PDF escaneado). ' +
           'Preciso de um PDF com texto de verdade.',
+        codigo: 'pdf_sem_texto',
+        adiantaTentarDeNovo: false,
       });
     }
     if (texto.length > MAX_CARACTERES_MATERIAL) {
       return reply
         .code(413)
-        .send({ erro: 'Material grande demais. Divida em partes menores.' });
+        .send({ erro: 'Material grande demais. Divida em partes menores.', codigo: 'material_grande' });
     }
 
     const usuario = await repo.obterUsuario(usuarioId, fuso);
@@ -86,13 +156,13 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
     try {
       mapa = await mapearMaterial(gerador, blocos);
     } catch (erro) {
-      return reply.code(502).send({ erro: mensagemDeErro(erro) });
+      return reply.code(502).send(responderErro(reply, erro, 'mapear material'));
     }
 
     const materiaId = randomUUID();
     const materia: Materia = MateriaSchema.parse({
       id: materiaId,
-      nome: corpo.data.nome?.trim() || mapa.nome,
+      nome: nomeDaMateria(recebido.nome, mapa.nome),
       cor: PALETA[(await repo.listarMaterias(usuarioId)).length % PALETA.length],
       criadaEm: new Date().toISOString(),
       temas: mapa.temas.map((t) => ({
@@ -129,7 +199,7 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
       return reply.code(207).send({
         materia,
         temaGerado: null,
-        erro: mensagemDeErro(erro),
+        ...responderErro(reply, erro, 'gerar primeiro tema'),
         cota: usuario.cota,
       });
     }
@@ -175,20 +245,27 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
         cota: usuario.cota,
       });
     } catch (erro) {
-      return reply.code(502).send({ erro: mensagemDeErro(erro) });
+      return reply.code(502).send(responderErro(reply, erro, 'gerar tema'));
     }
   });
 }
 
-function mensagemDeErro(erro: unknown): string {
-  if (erro instanceof ErroGeracao) return erro.message;
-  // Chave ausente ou invalida e problema de configuracao, nao de tentativa:
-  // mandar o aluno "tentar de novo" so faria ele repetir a mesma falha.
-  if (erro instanceof Anthropic.AuthenticationError) {
-    return 'A chave da API da Anthropic esta ausente ou invalida no servidor.';
+/**
+ * Loga a causa real e devolve algo acionavel para a tela.
+ *
+ * O log leva o erro inteiro: e a unica copia da causa, e sem ela o dono do app
+ * fica com uma mensagem generica e nenhuma pista.
+ */
+function responderErro(
+  reply: FastifyReply,
+  erro: unknown,
+  onde: string,
+): { erro: string; codigo: string; adiantaTentarDeNovo: boolean } {
+  if (erro instanceof ErroGeracao) {
+    reply.log.warn({ onde, causa: erro.causa }, erro.message);
+    return { erro: erro.message, codigo: 'resposta_invalida', adiantaTentarDeNovo: true };
   }
-  if (erro instanceof Anthropic.RateLimitError) {
-    return 'A IA esta sobrecarregada agora. Tenta daqui a pouco.';
-  }
-  return 'A geracao falhou agora. Tenta de novo.';
+  const d = descreverErro(erro);
+  reply.log.error({ onde, codigo: d.codigo, detalhe: d.detalhe, err: erro }, d.mensagem);
+  return { erro: d.mensagem, codigo: d.codigo, adiantaTentarDeNovo: d.adiantaTentarDeNovo };
 }
