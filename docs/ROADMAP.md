@@ -58,8 +58,14 @@ O app entrega vibração; som precisa de arquivos de áudio.
 **Assinatura.** A cota já é aplicada no servidor e o plano `basico` já vale 80
 questões/mês; falta o gateway e mudar o plano depois do pagamento.
 
-**Postgres.** SQLite resolve local e self-host. Um deploy com várias instâncias
-pede Postgres — é outra classe implementando `Repositorio`.
+**Deploy.** SQLite resolve local e self-host, e é o que o app usa hoje. Um
+deploy serverless (Vercel, Netlify) não serve como está: o disco é efêmero e a
+fila de tarefas em memória não sobrevive entre invocações. As duas peças que
+faltavam já estão escritas — `RepositorioPostgres` e `FilaPostgres` — mas
+**ainda não estão ligadas nem testadas contra um Postgres de verdade**. Ligar
+significa: escolher o host, apontar `DATABASE_URL`, rodar os testes do
+repositório contra o Postgres e adaptar o entrypoint. Um host com processo longo
+e disco (Render, Fly, Railway) roda o código como está, sem nada disso.
 
 **Animação de personagem.** Assets Rive ou Lottie. Não sai por código.
 

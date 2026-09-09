@@ -8,6 +8,11 @@ import { randomUUID } from 'node:crypto';
  * quebra no celular: basta o 4G oscilar para o aluno perder o trabalho que ja
  * foi pago. Com tarefa, a conexao pode cair — o servidor continua, e o app
  * pergunta o estado quando voltar.
+ *
+ * A fila tem duas implementacoes porque o estado dela precisa sobreviver ao
+ * ambiente. Em memoria basta enquanto o servidor e um processo so; em serverless
+ * cada requisicao pode cair numa instancia diferente, e a tarefa criada numa
+ * some para a outra. Ver `FilaPostgres`.
  */
 
 export type EstadoTarefa = 'na_fila' | 'rodando' | 'concluida' | 'falhou';
@@ -38,10 +43,47 @@ export type Tarefa = {
   falha?: FalhaTarefa;
 };
 
-export class FilaTarefas {
+export interface Fila {
+  criar(usuarioId: string, etapa: string): Promise<Tarefa>;
+  /** So devolve a tarefa para quem a criou. */
+  obter(id: string, usuarioId: string): Promise<Tarefa | null>;
+  andar(id: string, etapa: string, progresso: number): Promise<void>;
+  concluir(id: string, resultado: NonNullable<Tarefa['resultado']>): Promise<void>;
+  falhar(id: string, falha: FalhaTarefa): Promise<void>;
+  limpar(maxIdadeMs?: number, agora?: number): Promise<number>;
+}
+
+/**
+ * Roda o trabalho fora da requisicao.
+ *
+ * O `catch` nao e opcional: uma rejeicao nao tratada aqui derruba o processo
+ * inteiro no Node, e uma geracao que falhou nao pode levar o servidor junto.
+ *
+ * `aoTerminar` existe para o serverless: la a instancia pode ser congelada assim
+ * que a resposta sai, entao a plataforma precisa de uma promessa para segurar.
+ */
+export function executarTarefa(
+  fila: Fila,
+  id: string,
+  trabalho: () => Promise<NonNullable<Tarefa['resultado']>>,
+  aoFalhar: (erro: unknown) => FalhaTarefa,
+  aoTerminar?: (promessa: Promise<unknown>) => void,
+): void {
+  const promessa = (async () => {
+    try {
+      await fila.concluir(id, await trabalho());
+    } catch (erro) {
+      await fila.falhar(id, aoFalhar(erro)).catch(() => undefined);
+    }
+  })();
+  aoTerminar?.(promessa);
+  void promessa;
+}
+
+export class FilaMemoria implements Fila {
   private tarefas = new Map<string, Tarefa>();
 
-  criar(usuarioId: string, etapa: string): Tarefa {
+  async criar(usuarioId: string, etapa: string): Promise<Tarefa> {
     const tarefa: Tarefa = {
       id: randomUUID(),
       usuarioId,
@@ -54,14 +96,13 @@ export class FilaTarefas {
     return tarefa;
   }
 
-  /** So devolve a tarefa para quem a criou. */
-  obter(id: string, usuarioId: string): Tarefa | null {
+  async obter(id: string, usuarioId: string): Promise<Tarefa | null> {
     const tarefa = this.tarefas.get(id);
     if (!tarefa || tarefa.usuarioId !== usuarioId) return null;
     return tarefa;
   }
 
-  andar(id: string, etapa: string, progresso: number): void {
+  async andar(id: string, etapa: string, progresso: number): Promise<void> {
     const tarefa = this.tarefas.get(id);
     if (!tarefa) return;
     tarefa.estado = 'rodando';
@@ -70,7 +111,7 @@ export class FilaTarefas {
     tarefa.progresso = Math.max(tarefa.progresso, Math.min(1, progresso));
   }
 
-  concluir(id: string, resultado: NonNullable<Tarefa['resultado']>): void {
+  async concluir(id: string, resultado: NonNullable<Tarefa['resultado']>): Promise<void> {
     const tarefa = this.tarefas.get(id);
     if (!tarefa) return;
     tarefa.estado = 'concluida';
@@ -80,7 +121,7 @@ export class FilaTarefas {
     tarefa.concluidaEm = new Date().toISOString();
   }
 
-  falhar(id: string, falha: FalhaTarefa): void {
+  async falhar(id: string, falha: FalhaTarefa): Promise<void> {
     const tarefa = this.tarefas.get(id);
     if (!tarefa) return;
     tarefa.estado = 'falhou';
@@ -89,25 +130,8 @@ export class FilaTarefas {
     tarefa.concluidaEm = new Date().toISOString();
   }
 
-  /**
-   * Roda o trabalho fora da requisicao.
-   *
-   * O `catch` nao e opcional: uma rejeicao nao tratada aqui derruba o processo
-   * inteiro no Node, e uma geracao que falhou nao pode levar o servidor junto.
-   */
-  executar(id: string, trabalho: () => Promise<NonNullable<Tarefa['resultado']>>,
-           aoFalhar: (erro: unknown) => FalhaTarefa): void {
-    void (async () => {
-      try {
-        this.concluir(id, await trabalho());
-      } catch (erro) {
-        this.falhar(id, aoFalhar(erro));
-      }
-    })();
-  }
-
   /** Remove tarefas velhas para a memoria nao crescer sem limite. */
-  limpar(maxIdadeMs = 60 * 60 * 1000, agora = Date.now()): number {
+  async limpar(maxIdadeMs = 60 * 60 * 1000, agora = Date.now()): Promise<number> {
     let removidas = 0;
     for (const [id, t] of this.tarefas) {
       const fim = t.concluidaEm ?? t.criadaEm;

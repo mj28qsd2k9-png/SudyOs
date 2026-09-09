@@ -13,7 +13,7 @@ import {
 } from '../material/texto.js';
 import { ErroPdf, extrairTextoDoPdf, MAX_BYTES_PDF } from '../material/pdf.js';
 import { comTemaGerado, type Repositorio } from '../infra/repositorio.js';
-import type { FalhaTarefa, FilaTarefas } from '../dominio/tarefas.js';
+import { executarTarefa, type FalhaTarefa, type Fila } from '../dominio/tarefas.js';
 import { identificar } from './contexto.js';
 
 /**
@@ -91,17 +91,22 @@ function nomeDaMateria(doArquivo: string | undefined, daIA: string): string {
 export type DependenciasRotas = {
   repo: Repositorio;
   gerador: GeradorIA;
-  fila: FilaTarefas;
+  fila: Fila;
+  /**
+   * Em serverless a instancia pode ser congelada assim que a resposta sai. A
+   * plataforma precisa de uma promessa para segurar ate a geracao terminar.
+   */
+  segurar?: (promessa: Promise<unknown>) => void;
   questoesPorTema: number;
 };
 
 export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRotas) {
-  const { repo, gerador, fila, questoesPorTema } = deps;
+  const { repo, gerador, fila, segurar, questoesPorTema } = deps;
 
   app.get('/tarefas/:tarefaId', async (req, reply) => {
     const { usuarioId } = identificar(req);
     const { tarefaId } = req.params as { tarefaId: string };
-    const tarefa = fila.obter(tarefaId, usuarioId);
+    const tarefa = await fila.obter(tarefaId, usuarioId);
     if (!tarefa) return reply.code(404).send({ erro: 'Tarefa nao encontrada.' });
     return tarefa;
   });
@@ -176,12 +181,13 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
           'Para cobrir o resto, divida o PDF e suba as outras partes como matérias separadas.'
         : undefined;
 
-    const tarefa = fila.criar(usuarioId, 'Destrinchando o material...');
+    const tarefa = await fila.criar(usuarioId, 'Destrinchando o material...');
 
-    fila.executar(
+    executarTarefa(
+      fila,
       tarefa.id,
       async () => {
-        fila.andar(tarefa.id, 'Mapeando os temas...', 0.15);
+        void fila.andar(tarefa.id, 'Mapeando os temas...', 0.15);
         const mapa = await mapearMaterial(gerador, blocos);
 
         const materiaId = randomUUID();
@@ -206,7 +212,7 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
         await repo.salvarMateria(usuarioId, materia);
 
         const primeiro = materia.temas[0]!;
-        fila.andar(tarefa.id, `Preparando a aula de ${primeiro.nome}...`, 0.3);
+        void fila.andar(tarefa.id, `Preparando a aula de ${primeiro.nome}...`, 0.3);
 
         const trilha = await gerarTrilha(
           gerador,
@@ -214,7 +220,7 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
           primeiro,
           questoesPorTema,
           (feitas, total) =>
-            fila.andar(
+            void fila.andar(
               tarefa.id,
               feitas < total ? 'Criando os exercicios...' : 'Fechando a trilha...',
               0.3 + 0.65 * (feitas / total),
@@ -233,6 +239,7 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
         };
       },
       (erro) => responderErro(reply, erro, 'gerar materia'),
+      segurar,
     );
 
     return reply.code(202).send({ tarefaId: tarefa.id, cota: usuario.cota });
@@ -262,18 +269,19 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
       return reply.code(402).send({ erro: 'Cota do mes esgotada.', cota: usuario.cota });
     }
 
-    const tarefa = fila.criar(usuarioId, `Preparando a aula de ${tema.nome}...`);
-    fila.executar(
+    const tarefa = await fila.criar(usuarioId, `Preparando a aula de ${tema.nome}...`);
+    executarTarefa(
+      fila,
       tarefa.id,
       async () => {
-        fila.andar(tarefa.id, `Preparando a aula de ${tema.nome}...`, 0.1);
+        void fila.andar(tarefa.id, `Preparando a aula de ${tema.nome}...`, 0.1);
         const trilha = await gerarTrilha(
           gerador,
           blocos,
           tema,
           questoesPorTema,
           (feitas, total) =>
-            fila.andar(
+            void fila.andar(
               tarefa.id,
               feitas < total ? 'Criando os exercicios...' : 'Fechando a trilha...',
               0.1 + 0.85 * (feitas / total),
@@ -291,6 +299,7 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
         };
       },
       (erro) => responderErro(reply, erro, 'gerar tema'),
+      segurar,
     );
 
     return reply.code(202).send({ tarefaId: tarefa.id, cota: usuario.cota });

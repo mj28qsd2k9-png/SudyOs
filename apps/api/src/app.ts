@@ -13,13 +13,16 @@ import { exigirSessao } from './rotas/contexto.js';
 import { rotasMaterias } from './rotas/materias.js';
 import { rotasProgresso } from './rotas/progresso.js';
 import { MAX_BYTES_PDF } from './material/pdf.js';
-import { FilaTarefas } from './dominio/tarefas.js';
+import { FilaMemoria, type Fila } from './dominio/tarefas.js';
 
 export type OpcoesApp = {
   config: Config;
   /** Injetaveis no teste: sem eles a app usa memoria e a API de verdade. */
   repo?: Repositorio;
   gerador?: GeradorIA;
+  fila?: Fila;
+  /** Serverless: segura a instancia viva ate a geracao terminar. */
+  segurar?: (promessa: Promise<unknown>) => void;
 };
 
 export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
@@ -41,7 +44,7 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
   });
 
   const repo = opcoes.repo ?? new RepositorioSqlite(config.banco);
-  const fila = new FilaTarefas();
+  const fila = opcoes.fila ?? new FilaMemoria();
   const gerador =
     opcoes.gerador ??
     criarGerador({
@@ -85,6 +88,7 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
       repo,
       gerador,
       fila,
+      ...(opcoes.segurar ? { segurar: opcoes.segurar } : {}),
       questoesPorTema: config.questoesPorTema,
     });
     await rotasProgresso(instancia, { repo });
@@ -92,7 +96,7 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
 
   // Tarefa concluida vira lixo depois de um tempo; sem isso a memoria so cresce.
   const faxina = setInterval(() => {
-    fila.limpar();
+    void fila.limpar();
     void repo.limparSessoesVencidas(new Date());
   }, 15 * 60 * 1000);
   faxina.unref();

@@ -10,10 +10,11 @@
     "apps/mobile"
   ],
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22.5.0"
   },
   "scripts": {
-    "dev": "npm run build --workspace @estudaai/shared && npm run dev --workspace @estudaai/api",
+    "verificar": "node scripts/verificar.mjs",
+    "dev": "npm run verificar && npm run build --workspace @estudaai/shared && npm run dev --workspace @estudaai/api",
     "web": "npm run build --workspace @estudaai/shared && npm run web --workspace @estudaai/mobile",
     "mobile": "npm run build --workspace @estudaai/shared && npm run start --workspace @estudaai/mobile",
     "build": "npm run build --workspaces --if-present",

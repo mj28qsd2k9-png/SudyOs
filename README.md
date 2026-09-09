@@ -41,11 +41,22 @@ API própria.
 O que falta está em [`docs/ROADMAP.md`](docs/ROADMAP.md) — o próximo é
 recuperação de senha e as anotações no servidor.
 
-## Rodando
+## Rodando na sua máquina
+
+Precisa de **Node 22.5 ou mais novo** (o projeto usa o SQLite embutido do Node).
+Confira com `node -v`; se for mais antigo, instale em [nodejs.org](https://nodejs.org).
 
 ```bash
+git clone -b claude/new-session-0wnc41 https://github.com/mj28qsd2k9-png/SudyOs
+cd SudyOs
 npm install
-cp .env.example .env      # preencha ANTHROPIC_API_KEY
+cp .env.example .env      # abra o .env e cole sua chave da Anthropic
+```
+
+Antes de subir, confira o ambiente:
+
+```bash
+npm run verificar         # diz o que falta e como resolver
 ```
 
 Depois, **dois terminais**:
@@ -56,29 +67,24 @@ npm run web               # 2) o app    → http://localhost:8081
 ```
 
 Abra `http://localhost:8081`, crie uma conta e suba o PDF da sua apostila. Os
-dois comandos já compilam o pacote compartilhado antes de subir, então não há
-passo esquecível no meio.
+dois comandos compilam o pacote compartilhado sozinhos, e o `dev` roda a
+verificação antes de subir — não há passo esquecível no meio.
 
-Para rodar no celular pelo Expo Go em vez do navegador, use `npm run mobile` e
-escaneie o QR.
-
-O `dev` e o `web` leem o `.env` da raiz pelo suporte nativo do Node
-(`--env-file-if-exists`), sem dotenv.
-
-Para o app rodar no **celular físico**, troque `extra.apiUrl` em
-`apps/mobile/app.json` pelo IP da sua máquina na rede local — `localhost` no
-aparelho aponta para o próprio aparelho.
+Para usar pelo celular na mesma Wi-Fi, troque `extra.apiUrl` em
+`apps/mobile/app.json` pelo IP da sua máquina (`http://192.168.x.x:3333`) e rode
+`npm run mobile` para pegar o QR do Expo Go. `localhost` no aparelho aponta para
+o próprio aparelho.
 
 Há também um banco de testes da API em `http://localhost:3333/teste/`: cria
 conta, sobe um PDF e mostra a trilha crua, com as respostas à vista. É
 ferramenta de desenvolvimento, não o app.
 
 **Onde estão as coisas quando algo dá errado:** o banco em
-`apps/api/dados/estudaai.db` (um arquivo, dá para copiar) e a causa completa de
-qualquer falha de geração no log do terminal do `npm run dev`.
+`apps/api/dados/estudaai.db` (um arquivo, dá para copiar como backup) e a causa
+completa de qualquer falha de geração no log do terminal do `npm run dev`.
 
 ```bash
-npm test           # 142 testes, nenhum toca a rede
+npm test           # 143 testes, nenhum toca a rede
 npm run typecheck
 ```
 
