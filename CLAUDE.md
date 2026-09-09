@@ -14,12 +14,19 @@ UX e de lógica. Ele não é código de produção.
 
 ```bash
 npm install
-npm run dev          # API em http://localhost:3333, banco de testes em /teste/
-npm run web          # o app no navegador, em http://localhost:8081
+npm start            # usar: monta o app e serve tudo em http://localhost:3333
+npm run verificar    # so confere o ambiente, nao sobe nada
+
+npm run dev          # desenvolver: API em :3333 (com recarga)
+npm run web          # desenvolver: app em :8081 (com recarga)
 npm run mobile       # o app no celular (Expo Go, QR)
 npm test             # vitest, nenhum teste toca a rede
 npm run typecheck
 ```
+
+`npm start` serve a build estatica do app pela propria API, entao e um endereco
+so. Nesse modo o cliente usa caminho relativo — nao ha URL de API para
+configurar, e funciona igual em localhost, no IP da rede ou num dominio.
 
 `dev`, `web` e `mobile` ja compilam `@estudaai/shared` antes de subir: o app e a
 API importam o `dist`, e esquecer disso da um erro de modulo que nao parece com

@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import type { Materia } from '@estudaai/shared';
 
 /**
@@ -8,8 +9,30 @@ import type { Materia } from '@estudaai/shared';
  * nada de dentro dele, so o carrega — quem sabe de quem e a sessao e o servidor.
  */
 
+/**
+ * Onde fica a API.
+ *
+ * Tres situacoes, nesta ordem:
+ *
+ * 1. `EXPO_PUBLIC_API_URL` — usado pelo `npm run web`, que roda o app numa porta
+ *    diferente da API e por isso precisa do endereco completo.
+ * 2. `extra.apiUrl` no app.json — para o celular, que precisa do IP da maquina
+ *    na rede local.
+ * 3. Mesma origem — o caso do `npm start`, em que o proprio backend serve o app.
+ *    Caminho relativo funciona em qualquer endereco: localhost, IP da rede ou
+ *    um dominio, sem reconfigurar nada.
+ */
+const CONFIGURADO =
+  process.env['EXPO_PUBLIC_API_URL'] ||
+  (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ||
+  '';
+
 const BASE: string =
-  (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ?? 'http://localhost:3333';
+  CONFIGURADO ||
+  (Platform.OS === 'web'
+    ? '' // mesma origem
+    : 'http://localhost:3333'); // no aparelho isso aponta para o proprio
+                                // aparelho — configure extra.apiUrl.
 
 export class ErroApi extends Error {
   constructor(
@@ -105,7 +128,7 @@ export type ResultadoConclusao = {
 };
 
 export const api = {
-  base: BASE,
+  base: BASE || 'mesma origem',
 
   async saude(): Promise<{ ok: boolean; modelo: string; chaveConfigurada: boolean }> {
     return ler(await fetch(`${BASE}/saude`));

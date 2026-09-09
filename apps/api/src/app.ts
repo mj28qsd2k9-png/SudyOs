@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config.js';
 import { criarGerador, type GeradorIA } from './ia/cliente.js';
@@ -108,6 +109,48 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
     root: path.resolve(aqui, '../public'),
     prefix: '/teste/',
   });
+
+  /**
+   * O app, servido pelo proprio backend.
+   *
+   * Existe para quem so quer estudar: um comando, um endereco. Dois servidores
+   * e duas portas e ergonomia de quem esta desenvolvendo, e vira armadilha para
+   * quem so quer usar — basta esquecer o segundo terminal para o app "nao
+   * abrir". Quando a build nao existe, a rota explica como gerar em vez de dar
+   * 404.
+   */
+  const buildDoApp = path.resolve(aqui, '../../mobile/dist');
+  const temBuild = existsSync(path.join(buildDoApp, 'index.html'));
+
+  if (temBuild) {
+    await app.register(fastifyStatic, {
+      root: buildDoApp,
+      prefix: '/',
+      decorateReply: false,
+    });
+    // Expo Router e uma SPA: qualquer rota desconhecida devolve o index e o
+    // roteador do app resolve dali. Sem isto, recarregar em /materia/x da 404.
+    app.setNotFoundHandler((req, reply) => {
+      if (req.raw.url?.startsWith('/api') || req.method !== 'GET') {
+        return reply.code(404).send({ erro: 'Rota nao encontrada.' });
+      }
+      return reply.sendFile('index.html', buildDoApp);
+    });
+  } else {
+    app.get('/', async (_req, reply) =>
+      reply.type('text/html').send(
+        `<!doctype html><meta charset="utf-8">
+         <title>Estuda AI</title>
+         <body style="font:16px/1.6 system-ui;max-width:34rem;margin:12vh auto;padding:0 1.5rem;color:#4A3B32;background:#FFF9F4">
+         <h1 style="color:#E8501A">O app ainda nao foi montado</h1>
+         <p>Rode <code style="background:#FDEEE1;padding:2px 6px;border-radius:6px">npm start</code>
+         na raiz do projeto: ele monta o app e sobe tudo junto neste mesmo endereco.</p>
+         <p style="color:#9B8579;font-size:14px">Para desenvolver com recarga automatica,
+         use <code>npm run dev</code> e <code>npm run web</code> em dois terminais.</p>
+         </body>`,
+      ),
+    );
+  }
 
   return app;
 }

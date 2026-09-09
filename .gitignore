@@ -10,3 +10,4 @@ dados/
 *.db
 *.db-wal
 *.db-shm
+apps/mobile/dist/

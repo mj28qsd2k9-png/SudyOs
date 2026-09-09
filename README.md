@@ -51,40 +51,46 @@ git clone -b claude/new-session-0wnc41 https://github.com/mj28qsd2k9-png/SudyOs
 cd SudyOs
 npm install
 cp .env.example .env      # abra o .env e cole sua chave da Anthropic
+npm start
 ```
 
-Antes de subir, confira o ambiente:
+Abra **http://localhost:3333** — é o app. Um comando, um endereço.
+
+O `npm start` confere o ambiente, monta o app e sobe o backend servindo os dois
+no mesmo lugar. Se faltar alguma coisa (Node antigo, chave em branco, porta
+ocupada), ele diz o que é e o comando que resolve, em vez de um código de erro.
+Para conferir sem subir nada: `npm run verificar`.
+
+### Para desenvolver
+
+`npm start` monta o app uma vez; alterar o código do app exige rodar de novo.
+Com recarga automática são dois terminais:
 
 ```bash
-npm run verificar         # diz o que falta e como resolver
+npm run dev      # backend  → http://localhost:3333
+npm run web      # o app    → http://localhost:8081
 ```
 
-Depois, **dois terminais**:
+Nesse modo o app é servido pelo Expo na 8081 e fala com a API na 3333.
+
+### No celular, na mesma Wi-Fi
+
+Preencha `extra.apiUrl` em `apps/mobile/app.json` com o IP da sua máquina
+(`http://192.168.x.x:3333`) e rode `npm run mobile` para pegar o QR do Expo Go.
+`localhost` no aparelho aponta para o próprio aparelho.
+
+### Quando algo der errado
+
+Há um banco de testes da API em `http://localhost:3333/teste/`: cria conta, sobe
+um PDF e mostra a trilha crua, com as respostas à vista. **É ferramenta de
+diagnóstico, não o app** — serve para inspecionar o que a IA produziu.
+
+O banco de dados fica em `apps/api/dados/estudaai.db` (um arquivo, dá para copiar
+como backup) e a causa completa de qualquer falha de geração aparece no log do
+terminal.
 
 ```bash
-npm run dev               # 1) backend  → http://localhost:3333
-npm run web               # 2) o app    → http://localhost:8081
-```
-
-Abra `http://localhost:8081`, crie uma conta e suba o PDF da sua apostila. Os
-dois comandos compilam o pacote compartilhado sozinhos, e o `dev` roda a
-verificação antes de subir — não há passo esquecível no meio.
-
-Para usar pelo celular na mesma Wi-Fi, troque `extra.apiUrl` em
-`apps/mobile/app.json` pelo IP da sua máquina (`http://192.168.x.x:3333`) e rode
-`npm run mobile` para pegar o QR do Expo Go. `localhost` no aparelho aponta para
-o próprio aparelho.
-
-Há também um banco de testes da API em `http://localhost:3333/teste/`: cria
-conta, sobe um PDF e mostra a trilha crua, com as respostas à vista. É
-ferramenta de desenvolvimento, não o app.
-
-**Onde estão as coisas quando algo dá errado:** o banco em
-`apps/api/dados/estudaai.db` (um arquivo, dá para copiar como backup) e a causa
-completa de qualquer falha de geração no log do terminal do `npm run dev`.
-
-```bash
-npm test           # 143 testes, nenhum toca a rede
+npm test           # 147 testes, nenhum toca a rede
 npm run typecheck
 ```
 

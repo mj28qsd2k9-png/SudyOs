@@ -13,6 +13,7 @@
     "node": ">=22.5.0"
   },
   "scripts": {
+    "start": "npm run verificar && npm run build && npm run build:app --workspace @estudaai/mobile && npm run start --workspace @estudaai/api",
     "verificar": "node scripts/verificar.mjs",
     "dev": "npm run verificar && npm run build --workspace @estudaai/shared && npm run dev --workspace @estudaai/api",
     "web": "npm run build --workspace @estudaai/shared && npm run web --workspace @estudaai/mobile",
