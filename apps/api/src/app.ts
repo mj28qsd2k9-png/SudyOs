@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config.js';
 import { criarGerador, type GeradorIA } from './ia/cliente.js';
@@ -26,8 +26,32 @@ export type OpcoesApp = {
   segurar?: (promessa: Promise<unknown>) => void;
 };
 
+/**
+ * Qual versao do app esta no `dist`.
+ *
+ * Le do proprio bundle o carimbo que `scripts/montar-app.mjs` embute na hora
+ * de montar. Existe para "o app que estou vendo esta atualizado?" ter resposta
+ * por `curl localhost:3333/saude`, sem precisar abrir tela nenhuma — que e
+ * como se descobre, em um segundo, que o navegador esta com a build anterior.
+ */
+function versaoDaBuild(pasta: string): string | null {
+  try {
+    const js = path.join(pasta, '_expo', 'static', 'js', 'web');
+    const arquivo = readdirSync(js).find((n) => n.endsWith('.js'));
+    if (!arquivo) return null;
+    const conteudo = readFileSync(path.join(js, arquivo), 'utf8');
+    // O carimbo entra no bundle como texto: "<commit>[+] (<data>)".
+    return /"([0-9a-f]{7,}\+? \(\d{4}-\d{2}-\d{2}\))"/.exec(conteudo)?.[1] ?? null;
+  } catch {
+    // Build ausente ou ilegivel nao pode derrubar a rota de saude.
+    return null;
+  }
+}
+
 export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
   const { config } = opcoes;
+  const aqui = path.dirname(fileURLToPath(import.meta.url));
+  const buildDoApp = path.resolve(aqui, '../../mobile/dist');
   const app = Fastify({
     logger: config.ambiente === 'test' ? false : { level: 'info' },
     // Geracao e varias chamadas de IA em sequencia; o padrao de 5s nao cabe.
@@ -71,6 +95,9 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
 
   const saude = async () => ({
     ok: true,
+    // Qual build o servidor esta servindo. Serve para responder "o app que
+    // estou vendo esta atualizado?" sem depender de abrir a tela do Perfil.
+    app: versaoDaBuild(buildDoApp),
     modelo: config.modelo,
     questoesPorTema: config.questoesPorTema,
     // Sem chave a geracao nao roda; melhor dizer isso aqui do que falhar depois.
@@ -122,7 +149,7 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
   app.addHook('onClose', async () => clearInterval(faxina));
 
   // Cliente de teste: sobe um PDF no navegador e exercita a API de ponta a ponta.
-  const aqui = path.dirname(fileURLToPath(import.meta.url));
+
   await app.register(fastifyStatic, {
     root: path.resolve(aqui, '../public'),
     prefix: '/teste/',
@@ -137,7 +164,6 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
    * abrir". Quando a build nao existe, a rota explica como gerar em vez de dar
    * 404.
    */
-  const buildDoApp = path.resolve(aqui, '../../mobile/dist');
   const temBuild = existsSync(path.join(buildDoApp, 'index.html'));
 
   if (temBuild) {
@@ -145,6 +171,23 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
       root: buildDoApp,
       prefix: '/',
       decorateReply: false,
+      /**
+       * Cache com duas regras opostas, e cada uma esta certa para o seu caso.
+       *
+       * O que o Expo gera em `_expo/static/` tem o hash do conteudo no nome:
+       * mudou o codigo, mudou o nome do arquivo. Esse pode ficar guardado para
+       * sempre — nunca vai servir coisa velha, porque coisa velha tem outro
+       * nome.
+       *
+       * O `index.html` e o contrario: o nome nunca muda e e ele que aponta para
+       * os arquivos com hash. Guardar o index e guardar o app inteiro na versao
+       * antiga. `no-cache` nao proibe guardar; obriga a perguntar ao servidor
+       * se mudou — o que custa uma resposta vazia quando nao mudou.
+       */
+      setHeaders(reply, caminho) {
+        const comHash = caminho.includes(`${path.sep}_expo${path.sep}static${path.sep}`);
+        reply.header('cache-control', comHash ? 'public, max-age=31536000, immutable' : 'no-cache');
+      },
     });
     // Expo Router e uma SPA: qualquer rota desconhecida devolve o index e o
     // roteador do app resolve dali. Sem isto, recarregar em /materia/x da 404.
@@ -152,7 +195,9 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
       if (req.raw.url?.startsWith('/api') || req.method !== 'GET') {
         return reply.code(404).send({ erro: 'Rota nao encontrada.' });
       }
-      return reply.sendFile('index.html', buildDoApp);
+      // Mesmo motivo do `setHeaders` acima: o index nunca pode ficar guardado,
+      // senao uma build nova continua invisivel no navegador de quem ja abriu.
+      return reply.header('cache-control', 'no-cache').sendFile('index.html', buildDoApp);
     });
   } else {
     // Sem build, a raiz explica o que fazer — e a explicacao muda conforme o

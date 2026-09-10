@@ -162,6 +162,11 @@ if (!existsSync(indice)) {
     ok('a build do app esta em dia com o codigo');
   }
 
+  // O carimbo da build, lido de dentro do bundle. E o mesmo numero que aparece
+  // no Perfil, em "Sobre" — imprimir aqui poupa abrir o app para comparar.
+  const carimbo = carimboDaBuild(dist);
+  if (carimbo) ok(`build do app: ${carimbo}  (compare com \`git log -1 --format=%h\`)`);
+
   // Checagem por CAPACIDADE, como o resto do script: os sons estao DENTRO da
   // build? Se nao estiverem, o app na tela e anterior ao som, ponto final.
   const sons = achar(dist, (n) => n.endsWith('.wav'));
@@ -172,6 +177,15 @@ if (!existsSync(indice)) {
       'Rode `node scripts/gerar-sons.mjs` e depois `npm start` para montar de novo.',
     );
   }
+}
+
+function carimboDaBuild(pasta) {
+  const js = path.join(pasta, '_expo', 'static', 'js', 'web');
+  if (!existsSync(js)) return null;
+  const arquivo = readdirSync(js).find((n) => n.endsWith('.js'));
+  if (!arquivo) return null;
+  const conteudo = readFileSync(path.join(js, arquivo), 'utf8');
+  return /"([0-9a-f]{7,}\+? \(\d{4}-\d{2}-\d{2}\))"/.exec(conteudo)?.[1] ?? null;
 }
 
 function maisRecenteEm(pasta) {

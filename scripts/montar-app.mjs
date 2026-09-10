@@ -32,11 +32,28 @@ const sujo = gitOuNada(['status', '--porcelain']) !== '';
 const dia = new Date().toISOString().slice(0, 10);
 // O `+` avisa que a build saiu de uma arvore com mudanca nao commitada, que e
 // exatamente quando "mas eu acabei de mudar isso" costuma acontecer.
-const carimbo = `${commit}${sujo ? '+' : ''} · ${dia}`;
+// Separador ASCII de proposito: o bundle escapa caractere fora do ASCII
+// (o ` · ` virava `\xb7`), e quem le o carimbo de volta la de dentro — o
+// `/saude` — teria que adivinhar em qual das formas ele foi parar.
+const carimbo = `${commit}${sujo ? '+' : ''} (${dia})`;
 
 console.log(`Montando o app  (versao ${carimbo})`);
 
-const r = spawnSync('npx', ['expo', 'export', '--platform', 'web', '--output-dir', 'dist'], {
+/**
+ * `--clear` sempre. Nao e paranoia — foi medido.
+ *
+ * O Metro guarda o resultado da transformacao por conteudo do ARQUIVO, e o
+ * carimbo nao vem do arquivo, vem do ambiente. Sem limpar, a build sai com o
+ * carimbo da build anterior: a tela diz "estou na versao X" quando esta na Y.
+ * Um carimbo que mente e pior do que carimbo nenhum, porque encerra a
+ * investigacao no lugar errado.
+ *
+ * Custo medido: 26s limpa contra 5s aproveitando cache. Vinte e um segundos,
+ * numa montagem que so roda quando se atualiza o projeto — e do outro lado da
+ * balanca esta a falha que ja custou horas neste projeto: artefato velho sendo
+ * servido enquanto todo mundo procura o defeito no codigo novo.
+ */
+const r = spawnSync('npx', ['expo', 'export', '--platform', 'web', '--output-dir', 'dist', '--clear'], {
   cwd: app,
   stdio: 'inherit',
   env: { ...process.env, EXPO_PUBLIC_BUILD: carimbo },
