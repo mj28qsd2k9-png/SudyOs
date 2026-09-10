@@ -48,13 +48,30 @@ export function tarefaOutline(minimo: number, maximo: number): string {
   );
 }
 
+/**
+ * A regra que impede a questao de cobrar o que o aluno ainda nao viu.
+ *
+ * O recorte do material ja limita o CONTEUDO ao pedaco do tema, mas o modelo
+ * sabe contabilidade inteira e completa sozinho: sem esta linha ele cobra num
+ * exercicio do primeiro tema um termo que a apostila so define no modulo 6.
+ * Do ponto de vista de quem estuda, isso nao e questao dificil — e questao
+ * injusta, e a sensacao e de que o app esta errado.
+ */
+const SO_ESTE_TEMA =
+  '- O aluno so estudou ESTE tema. Nao cobre conceito, formula ou termo que ' +
+  'nao esteja no CONTEUDO acima. Se um termo de fora for indispensavel para a ' +
+  'questao fazer sentido, explique-o dentro do proprio enunciado.';
+
 /** Ensinar antes de cobrar: a aula abre o tema. */
 export function tarefaAula(tema: string): string {
   return (
     `Ensine o tema "${tema}" para um aluno que nunca viu esse assunto. ` +
     'Linguagem clara e direta, comecando do basico, com exemplos quando ajudarem. ' +
     'Divida em 3 a 4 blocos curtos, cada um com titulo e 2 a 4 frases. ' +
-    'Termine com um resumo de 3 pontos-chave curtos.'
+    'Termine com um resumo de 3 pontos-chave curtos.\n\n' +
+    'Este e o unico tema que o aluno estudou ate agora. Se precisar usar um ' +
+    'termo que o CONTEUDO nao define, defina-o voce, em uma frase, na hora ' +
+    'de usar.'
   );
 }
 
@@ -81,6 +98,7 @@ export function tarefaProva(tema: string, quantas: number, evitar?: string): str
     '- Sem enunciado negativo ("assinale a INCORRETA").',
     '- As alternativas erradas devem ser erros que um aluno realmente cometeria.',
     '- Varie a posicao da alternativa correta entre as questoes.',
+    SO_ESTE_TEMA,
     '',
     'Use o tipo "cenario" quando a questao partir de um caso concreto (o caso vai ' +
       'no campo contexto) e "mc" nos demais. Uma das questoes pode ser do formato ' +
@@ -112,6 +130,7 @@ export function tarefaFixacao(tema: string, quantas: number, evitar?: string): s
     '- ordenar: use uma sequencia que exista de verdade no conteudo (etapas de um ' +
       'processo, ordem de grandeza, linha do tempo), com itens que nao se repetem.',
     '- tf: afirmacoes que valha a pena corrigir; metade verdadeiras, metade falsas.',
+    SO_ESTE_TEMA,
     evitar ? `\nNao repita estes exercicios ja criados: ${evitar}` : '',
   ]
     .filter(Boolean)

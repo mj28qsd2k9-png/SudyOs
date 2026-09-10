@@ -217,7 +217,8 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
         const trilha = await gerarTrilha(
           gerador,
           blocos,
-          primeiro,
+          materia.temas,
+          0,
           questoesPorTema,
           (feitas, total) =>
             void fila.andar(
@@ -278,7 +279,8 @@ export async function rotasMaterias(app: FastifyInstance, deps: DependenciasRota
         const trilha = await gerarTrilha(
           gerador,
           blocos,
-          tema,
+          materia.temas,
+          materia.temas.findIndex((t) => t.id === temaId),
           questoesPorTema,
           (feitas, total) =>
             void fila.andar(

@@ -10,7 +10,7 @@ import {
   OutlineSchema,
 } from './esquemas.js';
 import { blocoMaterial, tarefaAula, tarefaFixacao, tarefaOutline, tarefaProva } from './prompts.js';
-import { amostra, trechoRelevante } from '../material/texto.js';
+import { amostra, recortarTema } from '../material/texto.js';
 
 /** Lotes maiores que isso saem com qualidade pior e arriscam estourar o teto de tokens. */
 const MAX_POR_LOTE = 5;
@@ -131,11 +131,23 @@ export type AoAndar = (feitas: number, total: number) => void;
 export async function gerarTrilha(
   gerador: GeradorIA,
   blocos: string[],
-  tema: Pick<Tema, 'nome' | 'chave'>,
+  /**
+   * Os temas da materia INTEIROS, em ordem, e qual deles gerar.
+   *
+   * O tema sozinho nao basta para recortar o material: e a posicao dos vizinhos
+   * que diz onde o assunto deste tema comeca e termina. Sem isso a janela
+   * escorrega para o modulo do lado e a questao cobra o que o aluno ainda nao
+   * estudou — foi o que aconteceu.
+   */
+  temas: Pick<Tema, 'nome' | 'chave'>[],
+  indice: number,
   alvoQuestoes: number,
   aoAndar?: AoAndar,
 ): Promise<TrilhaGerada> {
-  const material = blocoMaterial(trechoRelevante(blocos, tema));
+  const tema = temas[indice];
+  if (!tema) throw new ErroGeracao('Tema fora da materia.');
+
+  const material = blocoMaterial(recortarTema(blocos, temas, indice));
   const custos: Custo[] = [];
   // Falha de lote nao derruba o tema, mas nao pode sumir: se no fim sobrou
   // pouca coisa, e ela que explica o porque.

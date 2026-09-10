@@ -65,29 +65,152 @@ function semAcento(s: string): string {
 }
 
 /**
- * Escolhe o trecho do material que fala do tema, por sobreposicao de palavras.
- *
- * E busca por palavra-chave, nao embedding: e barata, roda sincrona e acerta o
- * suficiente porque as palavras do tema vieram do proprio documento. Trocar por
- * busca vetorial e uma otimizacao futura, nao um pre-requisito.
+ * Palavras que aparecem em todo material academico e nao localizam nada.
+ * Sem elas na lista, "Introducao a Contabilidade" casa com a apostila inteira.
  */
-export function trechoRelevante(
-  blocos: string[],
+const VAZIAS = new Set([
+  'introducao', 'conceito', 'conceitos', 'fundamentos', 'nocoes', 'principios',
+  'aspectos', 'estudo', 'estudos', 'analise', 'geral', 'gerais', 'basico',
+  'basicos', 'basica', 'basicas', 'parte', 'unidade', 'modulo', 'capitulo',
+  'aula', 'tema', 'sobre', 'para', 'como', 'suas', 'seus', 'esta', 'este',
+]);
+
+function termosDoTema(tema: { nome: string; chave?: string[] }): string[] {
+  const cru = semAcento([tema.nome, ...(tema.chave ?? [])].join(' ')).split(/\s+/);
+  return [...new Set(cru)].filter((p) => p.length > 3 && !VAZIAS.has(p));
+}
+
+/**
+ * Peso de cada termo: quanto mais raro no documento, mais ele localiza.
+ *
+ * Numa apostila de contabilidade, "contabil" aparece em todo bloco e nao diz
+ * nada sobre ONDE esta o tema; "depreciacao" aparece em tres blocos e diz tudo.
+ * Contar os dois igual — que era o que a versao anterior fazia — deixava a
+ * escolha nas maos do termo mais comum, isto e, do acaso.
+ */
+function pesos(blocosSemAcento: string[], termos: string[]): Map<string, number> {
+  const n = blocosSemAcento.length;
+  const mapa = new Map<string, number>();
+  for (const termo of termos) {
+    const ondeAparece = blocosSemAcento.reduce((c, b) => c + (b.includes(termo) ? 1 : 0), 0);
+    // Termo em todo bloco pesa ~0; termo em um bloco so pesa o maximo.
+    mapa.set(termo, ondeAparece === 0 ? 0 : Math.log(n / ondeAparece));
+  }
+  return mapa;
+}
+
+/**
+ * Onde cada tema mais aparece. `-1` quando nenhum termo do tema casa.
+ *
+ * `esperado` e onde o tema DEVERIA estar se o material fosse dividido em
+ * partes iguais — e so serve para desempatar. Empate acontece o tempo todo
+ * (numa apostila de contabilidade metade dos temas se chama "... contabil"), e
+ * desempatar pelo primeiro bloco, que e o que o `sort` faz de graca, joga todo
+ * tema para o comeco do documento. Desempatar pela posicao esperada joga cada
+ * um para perto de onde ele realmente esta.
+ */
+function ancorar(
+  blocosSemAcento: string[],
   tema: { nome: string; chave?: string[] },
+  esperado: number,
+): number {
+  const termos = termosDoTema(tema);
+  if (termos.length === 0) return -1;
+  const peso = pesos(blocosSemAcento, termos);
+
+  let melhor = -1;
+  let melhorPonto = 0;
+  blocosSemAcento.forEach((bloco, i) => {
+    const pontos = termos.reduce((acc, t) => acc + (bloco.includes(t) ? peso.get(t)! : 0), 0);
+    if (pontos <= 0) return;
+    const empate = Math.abs(pontos - melhorPonto) < 1e-9;
+    const ganha = empate
+      ? melhor < 0 || Math.abs(i - esperado) < Math.abs(melhor - esperado)
+      : pontos > melhorPonto;
+    if (ganha) {
+      melhorPonto = pontos;
+      melhor = i;
+    }
+  });
+  return melhor;
+}
+
+/**
+ * Recorta o pedaco do material que corresponde a UM tema.
+ *
+ * O que a versao anterior fazia, e por que estava errado: contava quantos
+ * termos do tema apareciam em cada bloco, ordenava e pegava os 3 melhores. Tres
+ * defeitos, todos com o mesmo sintoma — questao do tema 5 cobrando assunto do
+ * modulo 1:
+ *
+ * 1. Sem peso por raridade, "contabilidade" valia o mesmo que "depreciacao", e
+ *    a pontuacao empatava em quase todo bloco.
+ * 2. Empate + ordenacao estavel = vencem os blocos do COMECO do documento.
+ *    Para todo tema que nao fosse o primeiro, isso e material de outro modulo.
+ * 3. Quando nenhum termo casava, o trecho era `blocos.slice(0, 2)` — o comeco
+ *    da apostila, de novo, com toda a certeza errado para o tema 7.
+ *
+ * E os tres blocos escolhidos podiam vir de partes distantes do documento,
+ * colados um no outro: a IA lia um Frankenstein de tres modulos e cobrava os
+ * tres.
+ *
+ * Agora: uma JANELA CONTINUA em volta do bloco onde o tema mais aparece,
+ * limitada pelos temas vizinhos. Um assunto ocupa paginas seguidas — o recorte
+ * tambem tem que ser seguido. E quando nada casa, o palpite e a posicao
+ * proporcional do tema no documento, nao o comeco dele.
+ */
+export function recortarTema(
+  blocos: string[],
+  temas: { nome: string; chave?: string[] }[],
+  indice: number,
   limite = 8000,
 ): string {
-  const termos = semAcento([tema.nome, ...(tema.chave ?? [])].join(' '))
-    .split(/\s+/)
-    .filter((p) => p.length > 3);
+  if (blocos.length === 0) return '';
 
-  const pontuados = blocos.map((bloco) => {
-    const texto = semAcento(bloco);
-    const pontos = termos.reduce((acc, t) => acc + (texto.includes(t) ? 1 : 0), 0);
-    return { bloco, pontos };
-  });
+  const inteiro = blocos.join(' ');
+  // Material pequeno cabe inteiro: recortar so faria o aluno perder contexto.
+  if (inteiro.length <= limite) return inteiro;
 
-  pontuados.sort((a, b) => b.pontos - a.pontos);
-  const escolhidos = pontuados.filter((p) => p.pontos > 0).slice(0, 3).map((p) => p.bloco);
-  const trecho = escolhidos.length > 0 ? escolhidos : blocos.slice(0, 2);
-  return trecho.join(' ').slice(0, limite);
+  const semAcentos = blocos.map(semAcento);
+
+  // Onde o tema estaria se o material fosse dividido igualmente. E chute, e so
+  // e usado como desempate ou quando nenhum termo do tema casa — mas e um
+  // chute muito melhor do que "o comeco da apostila".
+  const proporcional = (i: number) =>
+    temas.length <= 1 ? 0 : Math.round((i * (blocos.length - 1)) / (temas.length - 1));
+
+  const ancoras = temas.map((t, i) => ancorar(semAcentos, t, proporcional(i)));
+
+  const alvo = ancoras[indice] ?? -1;
+  const centro = alvo >= 0 ? alvo : proporcional(indice);
+
+  // Os vizinhos delimitam o territorio: o tema anterior termina onde ele
+  // aparece, o proximo comeca onde ele aparece. Sem isso a janela do tema 2
+  // invade o tema 3 e cobra o que o aluno ainda nao viu.
+  const anteriores = ancoras.slice(0, indice).filter((a) => a >= 0 && a < centro);
+  const proximos = ancoras.slice(indice + 1).filter((a) => a >= 0 && a > centro);
+  const esquerda = anteriores.length > 0 ? Math.max(...anteriores) + 1 : 0;
+  const direita = proximos.length > 0 ? Math.min(...proximos) - 1 : blocos.length - 1;
+
+  // Cresce a partir do centro, primeiro para a frente: um assunto continua
+  // depois do titulo, raramente antes dele.
+  let inicio = centro;
+  let fim = centro;
+  let tamanho = blocos[centro]!.length;
+  let cresceu = true;
+  while (cresceu) {
+    cresceu = false;
+    if (fim < direita && tamanho + blocos[fim + 1]!.length <= limite) {
+      fim += 1;
+      tamanho += blocos[fim]!.length;
+      cresceu = true;
+    }
+    if (inicio > esquerda && tamanho + blocos[inicio - 1]!.length <= limite) {
+      inicio -= 1;
+      tamanho += blocos[inicio]!.length;
+      cresceu = true;
+    }
+  }
+
+  return blocos.slice(inicio, fim + 1).join(' ').slice(0, limite);
 }

@@ -48,12 +48,34 @@ PDF ──(pdf.js, no cliente)──► texto ──► POST /api/materias
                                           ├─ fatiar em blocos de 2.800 chars
                                           ├─ amostrar o documento INTEIRO ──► mapear temas (1 chamada)
                                           └─ gerar a trilha do 1º tema:
-                                               achar o trecho relevante, e então
+                                               recortar a janela do tema, e então
                                                em paralelo:
                                                ├─ aula            (1 chamada)
                                                ├─ prova    5 + 5  (2 chamadas, em série)
                                                └─ fixação  5 + 5  (2 chamadas, em série)
 ```
+
+**O recorte do material é por janela contínua, não por blocos avulsos.** Cada
+tema recebe só o pedaço do documento que fala dele. A primeira versão pontuava
+os blocos por quantas palavras do tema apareciam e pegava os 3 melhores, de
+qualquer lugar do documento — e isso produzia o defeito que um aluno notou
+usando o app: exercício do tema 5 cobrando assunto do módulo 1. Três causas
+somadas: sem peso por raridade, "contabilidade" valia o mesmo que
+"depreciação" e quase tudo empatava; no empate a ordenação estável devolvia os
+blocos do começo; e quando nada casava o trecho era literalmente
+`blocos.slice(0, 2)`.
+
+Hoje (`recortarTema`, em `apps/api/src/material/texto.ts`): os termos do tema
+pesam pelo inverso da frequência no documento (palavra que está em todo bloco
+pesa zero), a âncora é o bloco de maior pontuação, empate é desfeito pela
+posição esperada do tema, a janela cresce **contígua** a partir da âncora e é
+limitada pelas âncoras dos temas vizinhos. Assunto ocupa páginas seguidas; o
+recorte também tem que ser seguido. É por isso que `gerarTrilha` recebe a lista
+inteira de temas e um índice, e não o tema sozinho.
+
+O prompt reforça a mesma regra pelo outro lado: o modelo sabe a matéria inteira
+e completa sozinho, então cada tarefa diz que o aluno só estudou este tema e
+que termo de fora precisa ser explicado dentro do próprio enunciado.
 
 **A extração do PDF roda no cliente.** Evita subir o arquivo inteiro, mantém o
 backend sem parser de PDF e é o mesmo pdf.js que o protótipo já usava. O

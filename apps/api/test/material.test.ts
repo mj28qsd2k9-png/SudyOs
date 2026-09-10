@@ -3,7 +3,7 @@ import {
   amostra,
   fatiar,
   normalizarMaterial,
-  trechoRelevante,
+  recortarTema,
 } from '../src/material/texto.js';
 import { extrairJSON, extrairObjetos } from '../src/ia/json.js';
 import { calcularCusto, somarCustos } from '../src/ia/modelo.js';
@@ -53,23 +53,89 @@ describe('texto do material', () => {
 
   it('acha o bloco que fala do tema, ignorando acento e caixa', () => {
     const blocos = [
-      'Introducao geral do curso e apresentacao do professor.',
-      'A mitocondria e a usina de energia; produz ATP a partir de nutrientes.',
-      'A parede celular das plantas e feita de celulose.',
+      'Introducao geral do curso e apresentacao do professor. '.repeat(60),
+      'A mitocondria e a usina de energia; produz ATP a partir de nutrientes. '.repeat(60),
+      'A parede celular das plantas e feita de celulose. '.repeat(60),
     ];
-    const trecho = trechoRelevante(blocos, { nome: 'Mitocôndria', chave: ['energia', 'ATP'] });
-    expect(trecho).toContain('usina de energia');
+    const temas = [
+      { nome: 'Apresentacao', chave: ['professor'] },
+      { nome: 'Mitocôndria', chave: ['energia', 'ATP'] },
+      { nome: 'Parede celular', chave: ['celulose'] },
+    ];
+    expect(recortarTema(blocos, temas, 1, 3000)).toContain('usina de energia');
   });
 
-  it('cai nos primeiros blocos quando nada casa', () => {
+  it('material pequeno entra inteiro, sem recorte', () => {
     const blocos = ['bloco um', 'bloco dois', 'bloco tres'];
-    const trecho = trechoRelevante(blocos, { nome: 'Assunto Inexistente', chave: [] });
-    expect(trecho).toBe('bloco um bloco dois');
+    const temas = [{ nome: 'Um', chave: [] }, { nome: 'Dois', chave: [] }];
+    expect(recortarTema(blocos, temas, 1)).toBe('bloco um bloco dois bloco tres');
   });
 
-  it('respeita o limite de caracteres do trecho', () => {
+  it('respeita o limite de caracteres', () => {
     const blocos = Array.from({ length: 5 }, () => 'energia '.repeat(1000));
-    expect(trechoRelevante(blocos, { nome: 'energia', chave: [] }, 500)).toHaveLength(500);
+    const trecho = recortarTema(blocos, [{ nome: 'energia', chave: [] }], 0, 500);
+    expect(trecho).toHaveLength(500);
+  });
+
+  /**
+   * O bug que o aluno viu na pratica, reproduzido.
+   *
+   * Apostila de contabilidade em 6 modulos. A palavra "contabil" esta em todos
+   * eles — e era ela que decidia a escolha na versao anterior: a pontuacao
+   * empatava, a ordenacao estavel devolvia os blocos do comeco, e o exercicio
+   * do modulo 5 vinha cobrando o modulo 1.
+   */
+  describe('recorte de uma apostila em modulos', () => {
+    const MODULOS = [
+      ['Patrimonio', 'patrimonio', 'ativo passivo e patrimonio liquido da entidade contabil'],
+      ['Escrituracao', 'escrituracao', 'livro diario e razao na escrituracao contabil'],
+      ['Balanco', 'balanco', 'estrutura do balanco patrimonial contabil'],
+      ['Depreciacao', 'depreciacao', 'depreciacao amortizacao e exaustao do imobilizado contabil'],
+      ['Custos', 'custos', 'custo fixo variavel e rateio na contabilidade de custos'],
+      ['Tributos', 'tributos', 'tributos sobre o lucro na apuracao contabil'],
+    ] as const;
+
+    // Cada modulo ocupa 4 blocos seguidos, como num documento de verdade.
+    const blocos = MODULOS.flatMap(([, marca, frase], m) =>
+      Array.from({ length: 4 }, (_, k) => `MOD${m} ${marca} ${frase} `.repeat(40) + `parte${k} `),
+    );
+    const temas = MODULOS.map(([nome, marca]) => ({
+      nome: `${nome} na contabilidade`,
+      chave: [marca, 'contabil'],
+    }));
+
+    it.each(MODULOS.map(([nome], m) => [nome, m] as const))(
+      'o tema %s recebe o proprio modulo, nao outro',
+      (_nome, m) => {
+        const trecho = recortarTema(blocos, temas, m, 6000);
+        const modulosDentro = [...new Set([...trecho.matchAll(/MOD(\d)/g)].map((x) => Number(x[1])))];
+        expect(modulosDentro, `tema ${m} leu os modulos ${modulosDentro}`).toEqual([m]);
+      },
+    );
+
+    it('o recorte e continuo: nao cola pedacos distantes do documento', () => {
+      const trecho = recortarTema(blocos, temas, 3, 12_000);
+      const partes = [...trecho.matchAll(/MOD(\d)/g)].map((x) => Number(x[1]));
+      const distintos = [...new Set(partes)].sort();
+      // Se aparecer mais de um modulo, eles tem que ser vizinhos — nunca
+      // modulo 1 colado no modulo 6.
+      expect(distintos[distintos.length - 1]! - distintos[0]!).toBe(distintos.length - 1);
+    });
+
+    it('tema sem palavra que case cai na posicao proporcional, nao no comeco', () => {
+      const temasCegos = MODULOS.map(([nome]) => ({ nome, chave: ['xyzinexistente'] }));
+      const trecho = recortarTema(blocos, temasCegos, 5, 6000);
+      const modulos = [...new Set([...trecho.matchAll(/MOD(\d)/g)].map((x) => Number(x[1])))];
+      // O ultimo tema tem que cair no fim da apostila.
+      expect(Math.min(...modulos)).toBeGreaterThanOrEqual(4);
+    });
+
+    it('palavra que aparece no documento inteiro nao decide o recorte', () => {
+      // "contabil" esta em todo bloco; so "custos" localiza o modulo 4.
+      const trecho = recortarTema(blocos, temas, 4, 6000);
+      expect(trecho).toContain('MOD4');
+      expect(trecho).not.toContain('MOD0');
+    });
   });
 });
 
