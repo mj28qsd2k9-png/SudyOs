@@ -560,3 +560,35 @@ describe('aviso de material cortado', () => {
     await app.close();
   });
 });
+
+describe('glossario chega ao app', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    app = await criarApp({
+      config: config(),
+      repo: new RepositorioMemoria(),
+      gerador: criarGeradorFalso().gerador,
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('o tema gerado vem com os termos, ja podados', async () => {
+    const { materia } = await subirEEsperar(app, { texto: MATERIAL });
+    // O gerador falso devolve quatro termos, dois deles impossiveis: um termo
+    // de uma letra e uma repeticao. Se aparecerem aqui, a poda nao rodou.
+    expect(materia.temas[0].glossario.map((t: { termo: string }) => t.termo)).toEqual([
+      'permeabilidade seletiva',
+      'ATP',
+    ]);
+  });
+
+  it('tema nao gerado tem glossario vazio, nunca ausente', async () => {
+    const { materia } = await subirEEsperar(app, { texto: MATERIAL });
+    expect(materia.temas[1].questoes).toBeNull();
+    expect(materia.temas[1].glossario).toEqual([]);
+  });
+});

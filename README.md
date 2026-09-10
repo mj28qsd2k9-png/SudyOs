@@ -16,6 +16,9 @@ API própria.
   tela de geração com progresso, matéria com os temas, aula com anotações, os
   **7 tipos de exercício**, conclusão com XP e ofensiva, tela de ofensiva,
   missões, notas e perfil.
+- **glossário no toque**: o termo técnico do tema aparece sublinhado na aula,
+  no enunciado e na explicação, e um toque mostra o que ele significa. Os termos
+  saem na mesma chamada de IA que a aula, então não custam geração nenhuma.
 - **som e vibração** no acerto, no erro, na conclusão e quando a ofensiva sobe.
   Os arquivos são sintetizados por `node scripts/gerar-sons.mjs` — nada de
   licença nem de CDN. O som mistura com o que já estiver tocando (não corta a

@@ -71,7 +71,12 @@ export function tarefaAula(tema: string): string {
     'Termine com um resumo de 3 pontos-chave curtos.\n\n' +
     'Este e o unico tema que o aluno estudou ate agora. Se precisar usar um ' +
     'termo que o CONTEUDO nao define, defina-o voce, em uma frase, na hora ' +
-    'de usar.'
+    'de usar.\n\n' +
+    'Por fim, monte o GLOSSARIO do tema: de 5 a 10 termos tecnicos que ' +
+    'aparecem no CONTEUDO e que fariam um aluno novo parar de ler. Escreva o ' +
+    'termo como ele aparece no material (nao invente sinonimo) e o significado ' +
+    'em UMA frase de ate 20 palavras, em linguagem do dia a dia. Nao inclua ' +
+    'palavra comum, so o que e jargao da materia.'
   );
 }
 

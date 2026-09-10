@@ -1,4 +1,4 @@
-import type { Aula, Questao, Tema } from '@estudaai/shared';
+import type { Aula, Questao, Tema, Termo } from '@estudaai/shared';
 import { AulaSchema } from '@estudaai/shared';
 import { ErroGeracao, type GeradorIA } from './cliente.js';
 import { somarCustos, type Custo } from './modelo.js';
@@ -27,6 +27,30 @@ function dividirEmLotes(total: number): number[] {
     restante -= lote;
   }
   return lotes;
+}
+
+/**
+ * Poda o glossario antes de guardar.
+ *
+ * Termo de uma letra, termo repetido e definicao de tres linhas sao os tres
+ * jeitos de o glossario atrapalhar em vez de ajudar: o destaque na tela some no
+ * ruido e a definicao vira um segundo texto para ler no meio do exercicio.
+ */
+export function limparGlossario(bruto: { termo: string; significado: string }[]): Termo[] {
+  const vistos = new Set<string>();
+  const saida: Termo[] = [];
+  for (const t of bruto ?? []) {
+    const termo = (t?.termo ?? '').trim();
+    const significado = (t?.significado ?? '').trim();
+    const chave = termo.toLowerCase();
+    if (termo.length < 3 || termo.length > 60) continue;
+    if (significado.length < 10) continue;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    saida.push({ termo, significado: significado.slice(0, 240) });
+    if (saida.length >= 12) break;
+  }
+  return saida;
 }
 
 /** Resumo do que ja foi criado, para o lote seguinte nao repetir. */
@@ -107,6 +131,12 @@ export async function mapearMaterial(
 
 export type TrilhaGerada = {
   aula: Aula | null;
+  /**
+   * Termos tecnicos do tema. Saem na mesma chamada da aula: um glossario e
+   * meia duzia de frases curtas, e uma chamada so para isso custaria o
+   * material inteiro de novo por nada.
+   */
+  glossario: Termo[];
   questoes: Questao[];
   custo: Custo;
   /** Quantas questoes a IA devolveu mas foram descartadas por virem quebradas. */
@@ -153,25 +183,28 @@ export async function gerarTrilha(
   // pouca coisa, e ela que explica o porque.
   const falhas: unknown[] = [];
 
-  const rodarAula = async (): Promise<Aula | null> => {
+  const rodarAula = async (): Promise<{ aula: Aula | null; glossario: Termo[] }> => {
     try {
       const r = await gerador.gerar({
         material,
         tarefa: tarefaAula(tema.nome),
         esquema: AulaGeradaSchema,
         nomeEsquema: 'aula',
-        maxTokens: 3000,
+        maxTokens: 3500,
         esforco: 'medium',
       });
       custos.push(r.custo);
       andou();
       const validada = AulaSchema.safeParse(r.dados);
-      return validada.success ? validada.data : null;
+      return {
+        aula: validada.success ? validada.data : null,
+        glossario: limparGlossario(r.dados.glossario),
+      };
     } catch (erro) {
       andou();
       // Tema sem aula ainda e jogavel; o cliente cai direto no conceito curto.
       falhas.push(erro);
-      return null;
+      return { aula: null, glossario: [] };
     }
   };
 
@@ -252,7 +285,7 @@ export async function gerarTrilha(
     return saida;
   };
 
-  const [aula, prova, fixacao] = await Promise.all([
+  const [{ aula, glossario }, prova, fixacao] = await Promise.all([
     rodarAula(),
     rodarProva(),
     rodarFixacao(),
@@ -271,5 +304,5 @@ export async function gerarTrilha(
     );
   }
 
-  return { aula, questoes, custo, descartadas: Math.max(0, descartadas) };
+  return { aula, glossario, questoes, custo, descartadas: Math.max(0, descartadas) };
 }

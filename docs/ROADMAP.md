@@ -43,6 +43,27 @@ tabela está desenhada em `ARQUITETURA.md`; falta o endpoint.
 app hoje só permite escrever notas — seleção de texto em React Native precisa
 de tratamento próprio e ficou para depois.
 
+## Trazido do Duolingo
+
+O plano completo, com o que adotar e o que recusar, está em
+[`DUOLINGO.md`](DUOLINGO.md).
+
+**Feito: glossário no toque.** O termo técnico do tema fica sublinhado na aula,
+no enunciado e na explicação; um toque mostra o significado. Sai junto com a
+aula, na mesma chamada — não custa geração.
+
+**A seguir, e nenhum deles custa IA:**
+
+1. Guardar o erro por conceito e uma tela de revisão que **reaproveita** as
+   questões já geradas. Estudar mais deixa de exigir gerar mais.
+2. Agenda de revisão por conceito: o intervalo dobra a cada acerto e volta ao
+   início a cada erro (SM-2 enxuto — sem população para treinar modelo, a regra
+   simples é a honesta).
+3. Flashcards do próprio glossário, na mesma agenda.
+
+**Explicar o erro sob demanda** custa uma chamada curta, e só quando o aluno
+pede o botão.
+
 ## Depois
 
 **Revisão espaçada.** A conclusão já devolve as tags dos conceitos errados, e o

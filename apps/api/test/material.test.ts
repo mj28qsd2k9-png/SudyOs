@@ -8,7 +8,7 @@ import {
 import { extrairJSON, extrairObjetos } from '../src/ia/json.js';
 import { calcularCusto, somarCustos } from '../src/ia/modelo.js';
 import { QUESTOES_POR_TEMA, temasRestantes } from '@estudaai/shared';
-import { faixaDeTemas } from '../src/ia/gerar.js';
+import { faixaDeTemas, limparGlossario } from '../src/ia/gerar.js';
 
 describe('texto do material', () => {
   it('colapsa espacos e quebras', () => {
@@ -217,5 +217,36 @@ describe('quantos temas pedir', () => {
 
   it('material minusculo ainda pede pelo menos alguns temas', () => {
     expect(faixaDeTemas(blocosCom(300)).minimo).toBe(4);
+  });
+});
+
+describe('glossario do tema', () => {
+  it('poda termo curto, definicao vazia e repeticao', () => {
+    const limpo = limparGlossario([
+      { termo: 'regime de competencia', significado: 'A receita entra quando acontece, nao quando o dinheiro cai.' },
+      { termo: 'x', significado: 'curto demais para virar destaque' },
+      { termo: 'provisao', significado: 'curta' },
+      { termo: 'Regime de Competencia', significado: 'Repetido, so muda a caixa.' },
+      { termo: 'exaustao', significado: 'O desgaste de um recurso natural que se esgota.' },
+    ]);
+    expect(limpo.map((t) => t.termo)).toEqual(['regime de competencia', 'exaustao']);
+  });
+
+  it('corta a definicao comprida em vez de descartar o termo', () => {
+    const [t] = limparGlossario([{ termo: 'ativo', significado: 'a'.repeat(500) }]);
+    expect(t!.significado).toHaveLength(240);
+  });
+
+  it('para em 12 termos: mais que isso nao e dica, e um segundo texto', () => {
+    const muitos = Array.from({ length: 30 }, (_, i) => ({
+      termo: `termo numero ${i}`,
+      significado: 'uma definicao suficientemente longa para passar',
+    }));
+    expect(limparGlossario(muitos)).toHaveLength(12);
+  });
+
+  it('aguenta a IA devolvendo campo faltando', () => {
+    expect(limparGlossario(undefined as never)).toEqual([]);
+    expect(limparGlossario([{ termo: '', significado: '' }])).toEqual([]);
   });
 });

@@ -11,6 +11,11 @@ import { Chama } from '../../../src/ui/icones';
 import { RenderQuestao, rotuloDoTipo, type EstadoResposta } from '../../../src/ui/questao';
 import { voltar } from '../../../src/ui/navegar';
 import { retorno } from '../../../src/ui/retorno';
+import {
+  ListaGlossario,
+  ProvedorGlossario,
+  TextoComTermos,
+} from '../../../src/ui/glossario';
 import { cores, espaco, raio, tamanho } from '../../../src/ui/tema';
 
 type Fase = 'carregando' | 'aula' | 'questoes' | 'fim';
@@ -150,6 +155,9 @@ export default function Trilha() {
   }
 
   return (
+    // O glossario cobre a tela inteira de proposito: o termo que trava a
+    // leitura na aula e o mesmo que trava o enunciado tres minutos depois.
+    <ProvedorGlossario termos={tema.glossario}>
     <SafeAreaView style={e.tela} edges={['top', 'bottom']}>
       <Confete tocar={confete} quantidade={fase === 'fim' ? 90 : 40} />
 
@@ -219,7 +227,9 @@ export default function Trilha() {
                 <Text style={[e.tituloRetorno, { color: correcao ? cores.verdeEscuro : cores.vermelho }]}>
                   {correcao ? 'Boa!' : 'Quase.'}
                 </Text>
-                <Text style={e.explicacao}>{questoes[indice]!.explicacao}</Text>
+                <TextoComTermos estilo={e.explicacao}>
+                  {questoes[indice]!.explicacao}
+                </TextoComTermos>
                 <Botao
                   titulo={indice + 1 < questoes.length ? 'Continuar' : 'Terminar'}
                   variante={correcao ? 'verde' : 'primario'}
@@ -242,6 +252,7 @@ export default function Trilha() {
         />
       )}
     </SafeAreaView>
+    </ProvedorGlossario>
   );
 }
 
@@ -300,14 +311,17 @@ function Aula({
             {aula.resumo.map((ponto, i) => (
               <View key={i} style={e.pontoResumo}>
                 <View style={e.marcador} />
-                <Text style={e.textoResumo}>{ponto}</Text>
+                <TextoComTermos estilo={e.textoResumo}>{ponto}</TextoComTermos>
               </View>
             ))}
+            {/* O glossario inteiro fecha a aula: quem quiser revisar os termos
+                antes de entrar nos exercicios acha todos num lugar so. */}
+            <ListaGlossario termos={tema.glossario} />
           </>
         ) : (
           <>
             <Text style={e.tituloAula}>{aula.blocos[passo]!.titulo}</Text>
-            <Text style={e.textoAula}>{aula.blocos[passo]!.texto}</Text>
+            <TextoComTermos estilo={e.textoAula}>{aula.blocos[passo]!.texto}</TextoComTermos>
           </>
         )}
 

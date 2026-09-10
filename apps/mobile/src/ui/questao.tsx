@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Questao } from '@estudaai/shared';
 import { retorno } from './retorno';
 import { cores, espaco, raio, tamanho } from './tema';
+import { TextoComTermos } from './glossario';
 
 /**
  * Os 7 tipos de exercicio.
@@ -73,11 +74,11 @@ function Alternativas({ questao, correcao, aoMudar }: PorTipo<'mc' | 'calc' | 'c
     <View>
       {questao.tipo === 'cenario' && questao.contexto ? (
         <View style={e.contexto}>
-          <Text style={e.contextoTexto}>{questao.contexto}</Text>
+          <TextoComTermos estilo={e.contextoTexto}>{questao.contexto}</TextoComTermos>
         </View>
       ) : null}
 
-      <Text style={e.enunciado}>{questao.pergunta}</Text>
+      <TextoComTermos estilo={e.enunciado}>{questao.pergunta}</TextoComTermos>
 
       <View style={{ gap: espaco.sm + 2 }}>
         {questao.opcoes.map((opcao, i) => (
@@ -130,7 +131,7 @@ function VerdadeiroFalso({ questao, correcao, aoMudar }: PorTipo<'tf'>) {
 
   return (
     <View>
-      <Text style={e.enunciado}>{questao.pergunta}</Text>
+      <TextoComTermos estilo={e.enunciado}>{questao.pergunta}</TextoComTermos>
       <View style={{ flexDirection: 'row', gap: espaco.md }}>
         {botoes.map((b) => (
           <Pressable
@@ -323,7 +324,7 @@ function Ordenar({ questao, correcao, aoMudar }: PorTipo<'ordenar'>) {
 
   return (
     <View>
-      <Text style={e.enunciado}>{questao.instrucao}</Text>
+      <TextoComTermos estilo={e.enunciado}>{questao.instrucao}</TextoComTermos>
 
       <View style={e.areaResposta}>
         {escolhidos.length === 0 ? (

@@ -38,6 +38,17 @@ function respostaPara(pedido: PedidoGeracao<unknown>): unknown {
           { titulo: 'Como funciona', texto: 'Ela escolhe o que entra e o que sai.' },
         ],
         resumo: ['Membrana = porteira', 'Seletivamente permeavel'],
+        glossario: [
+          {
+            termo: 'permeabilidade seletiva',
+            significado: 'A membrana deixa passar umas coisas e barra outras.',
+          },
+          { termo: 'ATP', significado: 'A moeda de energia que a celula gasta.' },
+          // Entra pelo pedido mas nao pode sobreviver a poda: definicao curta
+          // demais e termo repetido sao os defeitos que o glossario tem na vida real.
+          { termo: 'x', significado: 'nao vale nada' },
+          { termo: 'ATP', significado: 'Repetido, tem que sumir na poda.' },
+        ],
       };
 
     case 'questoes_de_prova':

@@ -36,6 +36,14 @@ export const AulaGeradaSchema = z.object({
     )
     .describe('3 a 4 blocos curtos, do basico para o especifico'),
   resumo: z.array(z.string()).describe('3 pontos-chave curtos'),
+  glossario: z
+    .array(
+      z.object({
+        termo: z.string().describe('O termo tecnico, como ele aparece no material'),
+        significado: z.string().describe('Uma frase curta, em linguagem simples'),
+      }),
+    )
+    .describe('5 a 10 termos tecnicos deste tema que travam a leitura de quem nunca viu'),
 });
 export type AulaBruta = z.infer<typeof AulaGeradaSchema>;
 

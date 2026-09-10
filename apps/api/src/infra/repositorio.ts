@@ -210,12 +210,19 @@ export class RepositorioMemoria implements Repositorio {
 export function comTemaGerado(
   materia: Materia,
   temaId: string,
-  trilha: { aula: Tema['aula']; questoes: Questao[] },
+  trilha: { aula: Tema['aula']; questoes: Questao[]; glossario?: Tema['glossario'] },
 ): Materia {
   return {
     ...materia,
     temas: materia.temas.map((t) =>
-      t.id === temaId ? { ...t, aula: trilha.aula, questoes: trilha.questoes } : t,
+      t.id === temaId
+        ? {
+            ...t,
+            aula: trilha.aula,
+            questoes: trilha.questoes,
+            glossario: trilha.glossario ?? t.glossario,
+          }
+        : t,
     ),
   };
 }

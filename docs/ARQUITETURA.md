@@ -414,6 +414,29 @@ model Anotacao {
 }
 ```
 
+## Glossário no toque
+
+A dica de palavra do Duolingo, adaptada: lá, palavra nova aparece destacada e um
+toque mostra o significado, para ninguém travar por vocabulário. Numa apostila
+de contabilidade isso pesa mais do que num idioma — "regime de competência" e
+"realizável a longo prazo" são exatamente onde a leitura para.
+
+Duas decisões carregam o resto:
+
+- **Os termos vêm junto com a aula.** Mesma chamada, mesmo material já lido, só
+  algumas frases a mais de saída. Uma chamada separada pagaria o material
+  inteiro de novo para produzir seis linhas. Glossário, portanto, não muda o
+  custo de gerar um tema.
+- **A marcação é regra pura** (`packages/shared/src/glossario.ts`), então vale
+  igual na aula, no enunciado e na explicação da correção, e é testável sem
+  montar tela. Casa palavra inteira e sem acento (o material escreve "Provisão",
+  o glossário devolve "provisao"), marca cada termo uma vez por texto e dá o
+  termo mais longo como vencedor — senão "ativo" come "ativo circulante" e a
+  aula vira um campo minado de sublinhados.
+
+O destaque é sublinhado pontilhado, não cor cheia: dez palavras laranja num
+parágrafo produzem um texto que ninguém lê.
+
 ## Som
 
 O protótipo sintetizava com Web Audio, que não existe em React Native. Em vez de
