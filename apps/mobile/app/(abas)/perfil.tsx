@@ -10,6 +10,12 @@ import { Pessoa } from '../../src/ui/icones';
 import { retorno } from '../../src/ui/retorno';
 import { cores, espaco, raio, tamanho } from '../../src/ui/tema';
 
+/** Carimbado por `scripts/montar-app.mjs` na hora da build. */
+// Acesso por PONTO, nao por colchete: o Expo troca `process.env.EXPO_PUBLIC_*`
+// pelo valor na hora da build, e essa troca so reconhece a forma com ponto.
+// Com colchete o carimbo compila, roda e chega vazio — silenciosamente.
+const VERSAO = process.env.EXPO_PUBLIC_BUILD ?? 'desenvolvimento';
+
 export default function Perfil() {
   const { perfil, objetivo, email, sessao, materias, sair, som, definirSom } = useEstado();
   const [saindo, setSaindo] = useState(false);
@@ -126,6 +132,11 @@ export default function Perfil() {
 
         <Text style={e.secao}>Sobre</Text>
         <Cartao>
+          {/* Carimbo da build. Existe para "o app que estou vendo esta
+              atualizado?" ter resposta em vez de palpite: compare com
+              `git log -1 --format=%h`. O `+` diz que a build saiu com mudanca
+              nao commitada na arvore. */}
+          <Text style={e.detalhe}>Versão: {VERSAO}</Text>
           <Text style={e.detalhe}>Servidor: {api.base}</Text>
           <Text style={e.detalhe}>Fuso: {sessao?.fuso ?? '—'}</Text>
           <Text style={[e.detalhe, { marginTop: espaco.sm, lineHeight: 18 }]}>

@@ -22,8 +22,18 @@ import type { Materia } from '@estudaai/shared';
  *    Caminho relativo funciona em qualquer endereco: localhost, IP da rede ou
  *    um dominio, sem reconfigurar nada.
  */
+/**
+ * Acesso por PONTO, nao por colchete.
+ *
+ * O Expo troca `process.env.EXPO_PUBLIC_*` pelo valor durante a build, e essa
+ * troca so reconhece a forma com ponto. Escrito com colchete, o codigo compila,
+ * roda e le vazio — sem erro nenhum. Foi o que aconteceu aqui: o `npm run web`
+ * define EXPO_PUBLIC_API_URL para apontar o app da porta 8081 para a API na
+ * 3333, e a variavel nunca chegava. O app caia no mesmo-origem, pedia
+ * `localhost:8081/api` e tomava 404 — parecendo que a API e que estava fora.
+ */
 const CONFIGURADO =
-  process.env['EXPO_PUBLIC_API_URL'] ||
+  process.env.EXPO_PUBLIC_API_URL ||
   (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ||
   '';
 

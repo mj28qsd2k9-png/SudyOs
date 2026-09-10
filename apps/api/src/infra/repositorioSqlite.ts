@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { MateriaSchema, type Materia, type Plano } from '@estudaai/shared';
+import { MateriaSchema, type Materia, type Plano, type Revisao } from '@estudaai/shared';
 import type { Sessao } from '../dominio/autenticacao.js';
 import { competenciaAtual, type Credencial, type Repositorio, type Usuario } from './repositorio.js';
 
@@ -15,8 +15,10 @@ import { competenciaAtual, type Credencial, type Repositorio, type Usuario } fro
  *
  * A materia e guardada como JSON numa coluna. E deliberado: o formato dela e o
  * contrato Zod compartilhado, que ja valida na leitura, e normalizar temas e
- * questoes em tabelas so paga a pena quando houver consulta por questao — o que
- * chega junto com a revisao espacada, nao antes.
+ * questoes em tabelas so paga a pena quando houver consulta por questao. A
+ * revisao espacada chegou e nao pediu isso: ela guarda a CARTA (o historico do
+ * aluno naquela questao) numa tabela propria e busca a questao pelo id dentro
+ * do JSON da materia. O que ela consulta e o vencimento, nao o enunciado.
  */
 
 const ESQUEMA = `
@@ -67,7 +69,39 @@ CREATE TABLE IF NOT EXISTS sessoes (
 );
 CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes (usuario_id);
 CREATE INDEX IF NOT EXISTS idx_sessoes_expira ON sessoes (expira_em);
+
+-- Baralho de revisao: uma carta por questao que o aluno ja errou.
+-- Fica fora da materia porque e dado do ALUNO sobre a questao, nao da questao.
+-- Guardado assim, regerar um tema nao apaga o historico de erro junto.
+CREATE TABLE IF NOT EXISTS revisoes (
+  usuario_id TEXT NOT NULL,
+  questao_id TEXT NOT NULL,
+  materia_id TEXT NOT NULL,
+  tema_id TEXT NOT NULL,
+  tags TEXT NOT NULL DEFAULT '[]',
+  acertos_seguidos INTEGER NOT NULL DEFAULT 0,
+  erros INTEGER NOT NULL DEFAULT 0,
+  intervalo_dias INTEGER NOT NULL DEFAULT 0,
+  proxima_em TEXT NOT NULL,
+  ultima_em TEXT NOT NULL,
+  PRIMARY KEY (usuario_id, questao_id)
+);
+-- A consulta que importa e "o que vence hoje, deste aluno".
+CREATE INDEX IF NOT EXISTS idx_revisoes_vencimento ON revisoes (usuario_id, proxima_em);
 `;
+
+type LinhaRevisao = {
+  usuario_id: string;
+  questao_id: string;
+  materia_id: string;
+  tema_id: string;
+  tags: string;
+  acertos_seguidos: number;
+  erros: number;
+  intervalo_dias: number;
+  proxima_em: string;
+  ultima_em: string;
+};
 
 type LinhaUsuario = {
   id: string;
@@ -224,6 +258,62 @@ export class RepositorioSqlite implements Repositorio {
       .run(materiaId, usuarioId, JSON.stringify(blocos));
   }
 
+  async listarRevisoes(usuarioId: string): Promise<Revisao[]> {
+    const linhas = this.db
+      .prepare('SELECT * FROM revisoes WHERE usuario_id = ?')
+      .all(usuarioId) as LinhaRevisao[];
+    return linhas.map((l) => ({
+      questaoId: l.questao_id,
+      materiaId: l.materia_id,
+      temaId: l.tema_id,
+      tags: JSON.parse(l.tags) as string[],
+      acertosSeguidos: l.acertos_seguidos,
+      erros: l.erros,
+      intervaloDias: l.intervalo_dias,
+      proximaEm: l.proxima_em,
+      ultimaEm: l.ultima_em,
+    }));
+  }
+
+  async salvarRevisoes(usuarioId: string, revisoes: Revisao[]): Promise<void> {
+    if (revisoes.length === 0) return;
+    const gravar = this.db.prepare(
+      `INSERT INTO revisoes
+         (usuario_id, questao_id, materia_id, tema_id, tags,
+          acertos_seguidos, erros, intervalo_dias, proxima_em, ultima_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(usuario_id, questao_id) DO UPDATE SET
+         tags = excluded.tags,
+         acertos_seguidos = excluded.acertos_seguidos,
+         erros = excluded.erros,
+         intervalo_dias = excluded.intervalo_dias,
+         proxima_em = excluded.proxima_em,
+         ultima_em = excluded.ultima_em`,
+    );
+    // Uma transacao so: a sessao inteira de revisao entra ou nao entra.
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const r of revisoes) {
+        gravar.run(
+          usuarioId,
+          r.questaoId,
+          r.materiaId,
+          r.temaId,
+          JSON.stringify(r.tags),
+          r.acertosSeguidos,
+          r.erros,
+          r.intervaloDias,
+          r.proximaEm,
+          r.ultimaEm,
+        );
+      }
+      this.db.exec('COMMIT');
+    } catch (erro) {
+      this.db.exec('ROLLBACK');
+      throw erro;
+    }
+  }
+
   async criarUsuario(usuario: Usuario): Promise<void> {
     await this.salvarUsuario(usuario);
   }
@@ -320,6 +410,9 @@ export class RepositorioSqlite implements Repositorio {
     try {
       this.db.prepare('UPDATE materias SET usuario_id = ? WHERE usuario_id = ?').run(paraId, deId);
       this.db.prepare('UPDATE materiais SET usuario_id = ? WHERE usuario_id = ?').run(paraId, deId);
+      // O baralho vai junto: quem estudou sem conta e depois se cadastrou nao
+      // pode perder os proprios erros no caminho.
+      this.db.prepare('UPDATE revisoes SET usuario_id = ? WHERE usuario_id = ?').run(paraId, deId);
       this.db.exec('COMMIT');
     } catch (erro) {
       this.db.exec('ROLLBACK');

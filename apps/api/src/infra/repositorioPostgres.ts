@@ -1,5 +1,5 @@
 import { Pool, type PoolClient } from 'pg';
-import { MateriaSchema, type Materia, type Plano } from '@estudaai/shared';
+import { MateriaSchema, type Materia, type Plano, type Revisao } from '@estudaai/shared';
 import type { Sessao } from '../dominio/autenticacao.js';
 import { competenciaAtual, type Credencial, type Repositorio, type Usuario } from './repositorio.js';
 
@@ -68,6 +68,21 @@ CREATE TABLE IF NOT EXISTS sessoes (
 );
 CREATE INDEX IF NOT EXISTS idx_sessoes_usuario ON sessoes (usuario_id);
 CREATE INDEX IF NOT EXISTS idx_sessoes_expira ON sessoes (expira_em);
+
+CREATE TABLE IF NOT EXISTS revisoes (
+  usuario_id TEXT NOT NULL,
+  questao_id TEXT NOT NULL,
+  materia_id TEXT NOT NULL,
+  tema_id TEXT NOT NULL,
+  tags JSONB NOT NULL DEFAULT '[]',
+  acertos_seguidos INTEGER NOT NULL DEFAULT 0,
+  erros INTEGER NOT NULL DEFAULT 0,
+  intervalo_dias INTEGER NOT NULL DEFAULT 0,
+  proxima_em TEXT NOT NULL,
+  ultima_em TEXT NOT NULL,
+  PRIMARY KEY (usuario_id, questao_id)
+);
+CREATE INDEX IF NOT EXISTS idx_revisoes_vencimento ON revisoes (usuario_id, proxima_em);
 
 CREATE TABLE IF NOT EXISTS tarefas (
   id TEXT PRIMARY KEY,
@@ -239,6 +254,51 @@ export class RepositorioPostgres implements Repositorio {
        ON CONFLICT (materia_id) DO UPDATE SET blocos = EXCLUDED.blocos`,
       [materiaId, usuarioId, JSON.stringify(blocos)],
     );
+  }
+
+  async listarRevisoes(usuarioId: string): Promise<Revisao[]> {
+    const r = await this.pool.query('SELECT * FROM revisoes WHERE usuario_id = $1', [usuarioId]);
+    return r.rows.map((l: Record<string, unknown>) => ({
+      questaoId: l['questao_id'] as string,
+      materiaId: l['materia_id'] as string,
+      temaId: l['tema_id'] as string,
+      tags: l['tags'] as string[],
+      acertosSeguidos: l['acertos_seguidos'] as number,
+      erros: l['erros'] as number,
+      intervaloDias: l['intervalo_dias'] as number,
+      proximaEm: l['proxima_em'] as string,
+      ultimaEm: l['ultima_em'] as string,
+    }));
+  }
+
+  async salvarRevisoes(usuarioId: string, revisoes: Revisao[]): Promise<void> {
+    for (const r of revisoes) {
+      await this.pool.query(
+        `INSERT INTO revisoes
+           (usuario_id, questao_id, materia_id, tema_id, tags,
+            acertos_seguidos, erros, intervalo_dias, proxima_em, ultima_em)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         ON CONFLICT (usuario_id, questao_id) DO UPDATE SET
+           tags = EXCLUDED.tags,
+           acertos_seguidos = EXCLUDED.acertos_seguidos,
+           erros = EXCLUDED.erros,
+           intervalo_dias = EXCLUDED.intervalo_dias,
+           proxima_em = EXCLUDED.proxima_em,
+           ultima_em = EXCLUDED.ultima_em`,
+        [
+          usuarioId,
+          r.questaoId,
+          r.materiaId,
+          r.temaId,
+          JSON.stringify(r.tags),
+          r.acertosSeguidos,
+          r.erros,
+          r.intervaloDias,
+          r.proximaEm,
+          r.ultimaEm,
+        ],
+      );
+    }
   }
 
   // --- autenticacao ---

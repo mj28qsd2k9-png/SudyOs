@@ -1,4 +1,4 @@
-import type { Materia, Plano, Questao, Tema } from '@estudaai/shared';
+import type { Materia, Plano, Questao, Revisao, Tema } from '@estudaai/shared';
 import type { EstadoOfensiva } from '@estudaai/shared';
 import type { Sessao } from '../dominio/autenticacao.js';
 
@@ -42,6 +42,16 @@ export interface Repositorio {
   /** O texto do material fica fora da materia: e grande e so o servidor usa. */
   obterBlocos(usuarioId: string, materiaId: string): Promise<string[] | null>;
   salvarBlocos(usuarioId: string, materiaId: string, blocos: string[]): Promise<void>;
+
+  /**
+   * Baralho de revisao: uma carta por questao que o aluno ja errou.
+   *
+   * Fica fora da materia de proposito. E dado do ALUNO sobre a questao, nao da
+   * questao — e se morasse dentro da materia, regerar um tema apagaria o
+   * historico de erro junto.
+   */
+  listarRevisoes(usuarioId: string): Promise<Revisao[]>;
+  salvarRevisoes(usuarioId: string, revisoes: Revisao[]): Promise<void>;
 
   // --- autenticacao ---
   obterCredencialPorEmail(email: string): Promise<Credencial | null>;
@@ -89,6 +99,7 @@ export class RepositorioMemoria implements Repositorio {
   private usuarios = new Map<string, Usuario>();
   private materias = new Map<string, Map<string, Materia>>();
   private blocos = new Map<string, string[]>();
+  private revisoes = new Map<string, Map<string, Revisao>>();
   private credenciais = new Map<string, Credencial>();
   private sessoes = new Map<string, Sessao>();
 
@@ -154,6 +165,15 @@ export class RepositorioMemoria implements Repositorio {
         this.blocos.delete(chave);
       }
     }
+    // O baralho vai junto: quem estudou sem conta e depois se cadastrou nao
+    // pode perder os proprios erros no caminho.
+    const cartas = this.revisoes.get(deId);
+    if (cartas) {
+      const destino = this.revisoes.get(paraId) ?? new Map<string, Revisao>();
+      for (const [id, r] of cartas) destino.set(id, r);
+      this.revisoes.set(paraId, destino);
+      this.revisoes.delete(deId);
+    }
   }
 
   async obterUsuario(id: string, fuso: string): Promise<Usuario> {
@@ -203,6 +223,19 @@ export class RepositorioMemoria implements Repositorio {
 
   async salvarBlocos(usuarioId: string, materiaId: string, blocos: string[]): Promise<void> {
     this.blocos.set(`${usuarioId}:${materiaId}`, blocos);
+  }
+
+  async listarRevisoes(usuarioId: string): Promise<Revisao[]> {
+    return [...(this.revisoes.get(usuarioId)?.values() ?? [])];
+  }
+
+  async salvarRevisoes(usuarioId: string, revisoes: Revisao[]): Promise<void> {
+    let doUsuario = this.revisoes.get(usuarioId);
+    if (!doUsuario) {
+      doUsuario = new Map();
+      this.revisoes.set(usuarioId, doUsuario);
+    }
+    for (const r of revisoes) doUsuario.set(r.questaoId, r);
   }
 }
 

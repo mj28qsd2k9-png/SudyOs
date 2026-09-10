@@ -4,3 +4,4 @@ export * from './trilha.js';
 export * from './glossario.js';
 export * from './cota.js';
 export * from './ofensiva.js';
+export * from './revisao.js';

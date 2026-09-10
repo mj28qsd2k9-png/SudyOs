@@ -10,7 +10,7 @@
  * pergunta certa mesmo quando a versao minima muda.
  */
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -121,7 +121,80 @@ if (livre) {
   );
 }
 
-// 5) macOS: limite de arquivos abertos. O Metro abre muito arquivo de uma vez,
+// 5) A build do app e mais nova que o codigo?
+//
+// Esta checagem nasceu de um caso real: o aluno atualizou o codigo, subiu o
+// app e nao viu nada do que tinha mudado — nem o som. O codigo estava certo; o
+// que estava na tela era a build ANTERIOR, porque a montagem nao rodou (ou
+// falhou, ou um servidor antigo continuou de pe servindo o `dist` velho).
+// Sem esta checagem o sintoma e "voce mentiu", e a causa e invisivel.
+const dist = path.join(raiz, 'apps', 'mobile', 'dist');
+const indice = path.join(dist, 'index.html');
+
+if (!existsSync(indice)) {
+  aviso(
+    'o app ainda nao foi montado',
+    'Rode `npm start` na raiz: ele monta o app e serve tudo em http://localhost:3333.',
+  );
+} else {
+  const montadoEm = statSync(indice).mtimeMs;
+  const fontes = [
+    path.join(raiz, 'apps', 'mobile', 'app'),
+    path.join(raiz, 'apps', 'mobile', 'src'),
+    path.join(raiz, 'apps', 'mobile', 'assets'),
+    path.join(raiz, 'packages', 'shared', 'src'),
+  ];
+  const maisNovo = Math.max(...fontes.map(maisRecenteEm));
+
+  if (maisNovo > montadoEm) {
+    const quando = new Date(montadoEm).toLocaleString('pt-BR');
+    // AVISO, nunca falha: o `npm start` roda esta verificacao ANTES de montar,
+    // entao derrubar aqui impediria justamente a montagem que resolve o caso.
+    aviso(
+      `a build do app e mais velha que o codigo (montada em ${quando})`,
+      'Se voce esta rodando `npm start`, ele vai remontar agora e isso se resolve ' +
+        'sozinho.\n' +
+        '    Se o app ja esta no ar e a mudanca "nao apareceu", a causa e esta: ' +
+        'o navegador esta mostrando a build ANTERIOR. Encerre com Ctrl+C e rode ' +
+        '`npm start` de novo.',
+    );
+  } else {
+    ok('a build do app esta em dia com o codigo');
+  }
+
+  // Checagem por CAPACIDADE, como o resto do script: os sons estao DENTRO da
+  // build? Se nao estiverem, o app na tela e anterior ao som, ponto final.
+  const sons = achar(dist, (n) => n.endsWith('.wav'));
+  if (sons.length >= 5) ok(`som embutido na build (${sons.length} arquivos)`);
+  else {
+    aviso(
+      `a build tem ${sons.length} som(ns); esperado 5`,
+      'Rode `node scripts/gerar-sons.mjs` e depois `npm start` para montar de novo.',
+    );
+  }
+}
+
+function maisRecenteEm(pasta) {
+  if (!existsSync(pasta)) return 0;
+  let maior = 0;
+  for (const item of readdirSync(pasta, { withFileTypes: true })) {
+    const cheio = path.join(pasta, item.name);
+    maior = Math.max(maior, item.isDirectory() ? maisRecenteEm(cheio) : statSync(cheio).mtimeMs);
+  }
+  return maior;
+}
+
+function achar(pasta, casa, encontrados = []) {
+  if (!existsSync(pasta)) return encontrados;
+  for (const item of readdirSync(pasta, { withFileTypes: true })) {
+    const cheio = path.join(pasta, item.name);
+    if (item.isDirectory()) achar(cheio, casa, encontrados);
+    else if (casa(item.name)) encontrados.push(cheio);
+  }
+  return encontrados;
+}
+
+// 6) macOS: limite de arquivos abertos. O Metro abre muito arquivo de uma vez,
 // e o padrao do Mac (256) e baixo demais — a build morre com EMFILE, que nao
 // diz "aumente o ulimit".
 if (process.platform === 'darwin') {

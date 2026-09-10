@@ -33,7 +33,7 @@
     "ios": "expo start --ios",
     "web": "EXPO_PUBLIC_API_URL=http://localhost:3333 expo start --web",
     "typecheck": "tsc --noEmit",
-    "build:app": "expo export --platform web --output-dir dist"
+    "build:app": "node ../../scripts/montar-app.mjs"
   },
   "private": true
 }
