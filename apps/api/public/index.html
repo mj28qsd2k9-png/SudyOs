@@ -154,10 +154,10 @@ async function api(caminho, opcoes = {}) {
 }
 
 $('arquivo').addEventListener('change', () => pintarSessao());
-$('btEntrar').addEventListener('click', () => autenticar('/auth/entrar'));
-$('btCadastrar').addEventListener('click', () => autenticar('/auth/cadastrar'));
+$('btEntrar').addEventListener('click', () => autenticar('/api/auth/entrar'));
+$('btCadastrar').addEventListener('click', () => autenticar('/api/auth/cadastrar'));
 $('btSair').addEventListener('click', async () => {
-  await fetch('/auth/sair', { method: 'POST', headers: cabecalhos() }).catch(() => {});
+  await fetch('/api/auth/sair', { method: 'POST', headers: cabecalhos() }).catch(() => {});
   estado.token = null;
   estado.email = null;
   localStorage.removeItem('teste:token');
@@ -169,12 +169,12 @@ $('btSair').addEventListener('click', async () => {
 pintarSessao();
 
 $('btSaude').addEventListener('click', async () => {
-  saida.innerHTML = `<pre>${JSON.stringify(await api('/saude'), null, 2)}</pre>`;
+  saida.innerHTML = `<pre>${JSON.stringify(await api('/api/saude'), null, 2)}</pre>`;
 });
 
 // Gerar custa dinheiro; recarregar a página não pode obrigar a gerar de novo.
 $('btCarregar').addEventListener('click', async () => {
-  const { materias } = await api('/materias');
+  const { materias } = await api('/api/materias');
   if (!materias.length) {
     status('Esse usuário ainda não tem matéria nenhuma.');
     return;
@@ -185,7 +185,7 @@ $('btCarregar').addEventListener('click', async () => {
 });
 
 $('btPerfil').addEventListener('click', async () => {
-  saida.innerHTML = `<pre>${JSON.stringify(await api('/perfil'), null, 2)}</pre>`;
+  saida.innerHTML = `<pre>${JSON.stringify(await api('/api/perfil'), null, 2)}</pre>`;
 });
 
 $('btSubir').addEventListener('click', async () => {
@@ -200,7 +200,7 @@ $('btSubir').addEventListener('click', async () => {
     status('Enviando o PDF...', 10);
 
     // Sem Content-Type: o navegador tem que pôr o boundary do multipart.
-    const r = await fetch('/materias', { method: 'POST', headers: cabecalhos(), body: forma });
+    const r = await fetch('/api/materias', { method: 'POST', headers: cabecalhos(), body: forma });
     const corpo = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(corpo.erro || `${r.status} ${r.statusText}`);
 
@@ -214,7 +214,7 @@ $('btSubir').addEventListener('click', async () => {
       return;
     }
 
-    const m = await api(`/materias/${tarefa.resultado.materiaId}`);
+    const m = await api(`/api/materias/${tarefa.resultado.materiaId}`);
     estado.materia = m.materia;
     status(`Pronto em ${segundos}s. Custo: US$ ${tarefa.resultado.custoUSD}`, 100);
     render();
@@ -233,7 +233,7 @@ $('btSubir').addEventListener('click', async () => {
  */
 async function acompanhar(tarefaId) {
   for (;;) {
-    const t = await api(`/tarefas/${tarefaId}`);
+    const t = await api(`/api/tarefas/${tarefaId}`);
     status(t.etapa, Math.round(t.progresso * 100));
     if (t.estado === 'concluida' || t.estado === 'falhou') return t;
     await new Promise((r) => setTimeout(r, 1500));
@@ -314,7 +314,7 @@ function questaoHTML(q) {
 
 async function gerar(temaId) {
   try {
-    const r = await api(`/materias/${estado.materia.id}/temas/${temaId}/gerar`, { method: 'POST' });
+    const r = await api(`/api/materias/${estado.materia.id}/temas/${temaId}/gerar`, { method: 'POST' });
     if (r.tarefaId) {
       const t = await acompanhar(r.tarefaId);
       if (t.estado === 'falhou') {
@@ -323,7 +323,7 @@ async function gerar(temaId) {
       }
       status(`Tema gerado. Custo: US$ ${t.resultado.custoUSD}`, 100);
     }
-    const m = await api(`/materias/${estado.materia.id}`);
+    const m = await api(`/api/materias/${estado.materia.id}`);
     estado.materia = m.materia;
     render();
   } catch (e) {
@@ -341,7 +341,7 @@ async function concluir(temaId) {
     return q.correta;
   });
   try {
-    const r = await api('/progresso/concluir', {
+    const r = await api('/api/progresso/concluir', {
       method: 'POST',
       body: JSON.stringify({ materiaId: estado.materia.id, temaId, respostas }),
     });

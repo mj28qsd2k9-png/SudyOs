@@ -16,6 +16,10 @@ API própria.
   tela de geração com progresso, matéria com os temas, aula com anotações, os
   **7 tipos de exercício**, conclusão com XP e ofensiva, tela de ofensiva,
   missões, notas e perfil.
+- **som e vibração** no acerto, no erro, na conclusão e quando a ofensiva sobe.
+  Os arquivos são sintetizados por `node scripts/gerar-sons.mjs` — nada de
+  licença nem de CDN. O som mistura com o que já estiver tocando (não corta a
+  sua música) e dá para desligar no Perfil.
 
 **O backend**, em Fastify:
 
@@ -122,28 +126,32 @@ prototipo/           O protótipo original, como referência de UX.
 
 ## API
 
-Fora de `/saude` e `/auth/*`, tudo exige `Authorization: Bearer <token>`. O
+Toda a API vive sob `/api`. O mesmo servidor serve o app, então sem o prefixo
+uma tela nova pode ocupar o endereço de uma rota nova — foi o que aconteceu com
+`/perfil`, que era rota da API e tela do app ao mesmo tempo.
+
+Fora de `/saude` e `/api/auth/*`, tudo exige `Authorization: Bearer <token>`. O
 cabeçalho `x-fuso` (IANA, ex.: `America/Sao_Paulo`) diz onde o aluno está — quem
 decide que dia é hoje continua sendo o servidor.
 
 | Método | Rota | O que faz |
 |---|---|---|
-| `POST` | `/auth/cadastrar` | `{ email, senha, aparelho? }` → cria a conta e abre sessão |
-| `POST` | `/auth/entrar` | `{ email, senha }` → abre sessão |
-| `POST` | `/auth/sair` | Invalida o token deste aparelho |
-| `POST` | `/auth/sair-de-todos` | Invalida todas as sessões da conta |
-| `GET` | `/auth/eu` | Quem é o dono da sessão |
+| `POST` | `/api/auth/cadastrar` | `{ email, senha, aparelho? }` → cria a conta e abre sessão |
+| `POST` | `/api/auth/entrar` | `{ email, senha }` → abre sessão |
+| `POST` | `/api/auth/sair` | Invalida o token deste aparelho |
+| `POST` | `/api/auth/sair-de-todos` | Invalida todas as sessões da conta |
+| `GET` | `/api/auth/eu` | Quem é o dono da sessão |
 | `GET` | `/saude` | Modelo em uso e se a chave está configurada |
-| `GET` | `/materias` | Matérias do usuário |
-| `GET` | `/materias/:id` | Uma matéria com seus temas |
-| `POST` | `/materias` | PDF em multipart (ou `{ texto }` em JSON) → **202** com `tarefaId` |
-| `POST` | `/materias/:id/temas/:temaId/gerar` | Gera a trilha de um tema (gasta cota) → **202** |
-| `GET` | `/tarefas/:id` | Estado da geração: etapa, progresso, resultado ou falha |
-| `POST` | `/progresso/concluir` | `{ materiaId, temaId, respostas }` → corrige, dá XP e move a ofensiva |
-| `GET` | `/perfil` | Ofensiva, cota e XP |
+| `GET` | `/api/materias` | Matérias do usuário |
+| `GET` | `/api/materias/:id` | Uma matéria com seus temas |
+| `POST` | `/api/materias` | PDF em multipart (ou `{ texto }` em JSON) → **202** com `tarefaId` |
+| `POST` | `/api/materias/:id/temas/:temaId/gerar` | Gera a trilha de um tema (gasta cota) → **202** |
+| `GET` | `/api/tarefas/:id` | Estado da geração: etapa, progresso, resultado ou falha |
+| `POST` | `/api/progresso/concluir` | `{ materiaId, temaId, respostas }` → corrige, dá XP e move a ofensiva |
+| `GET` | `/api/perfil` | Ofensiva, cota e XP |
 
-A geração é assíncrona: `POST /materias` responde **202** com um `tarefaId` e o
-cliente acompanha por `GET /tarefas/:id`. Se a geração falhar depois de o
+A geração é assíncrona: `POST /api/materias` responde **202** com um `tarefaId` e o
+cliente acompanha por `GET /api/tarefas/:id`. Se a geração falhar depois de o
 mapeamento ter dado certo, a matéria fica salva com os temas por gerar — o aluno
 tenta de novo sem subir o PDF outra vez.
 

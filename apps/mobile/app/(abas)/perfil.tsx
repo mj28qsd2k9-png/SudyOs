@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEstado } from '../../src/dados/estado';
@@ -7,10 +7,11 @@ import { api } from '../../src/api/cliente';
 import { BarraTopo } from '../../src/ui/barraTopo';
 import { Botao, Cartao, Subtitulo, Titulo } from '../../src/ui/componentes';
 import { Pessoa } from '../../src/ui/icones';
+import { retorno } from '../../src/ui/retorno';
 import { cores, espaco, raio, tamanho } from '../../src/ui/tema';
 
 export default function Perfil() {
-  const { perfil, objetivo, email, sessao, materias, sair } = useEstado();
+  const { perfil, objetivo, email, sessao, materias, sair, som, definirSom } = useEstado();
   const [saindo, setSaindo] = useState(false);
   const router = useRouter();
 
@@ -90,6 +91,28 @@ export default function Perfil() {
           </Text>
         </Cartao>
 
+        <Text style={e.secao}>Preferências</Text>
+        <Cartao>
+          <View style={e.linhaInterruptor}>
+            <View style={{ flex: 1 }}>
+              <Text style={e.rotuloInterruptor}>Som</Text>
+              <Text style={e.detalhe}>
+                Acerto, erro e comemoração. Não interrompe a sua música.
+              </Text>
+            </View>
+            <Switch
+              value={som}
+              onValueChange={(v) => {
+                definirSom(v);
+                // Toca ao ligar, para você ouvir o que acabou de escolher.
+                if (v) retorno.acerto();
+              }}
+              trackColor={{ true: cores.laranja, false: cores.borda }}
+              accessibilityLabel="Ligar ou desligar o som"
+            />
+          </View>
+        </Cartao>
+
         <Text style={e.secao}>Ofensiva</Text>
         <Botao titulo="Ver minha ofensiva" variante="fantasma" aoTocar={() => router.push('/ofensiva')} />
 
@@ -149,4 +172,6 @@ const e = StyleSheet.create({
   },
   secao: { fontSize: tamanho.h3, fontWeight: '800', color: cores.texto, marginTop: espaco.xl, marginBottom: espaco.sm },
   linha: { fontWeight: '800', fontSize: tamanho.pequeno + 1, color: cores.texto, lineHeight: 20 },
+  linhaInterruptor: { flexDirection: 'row', alignItems: 'center', gap: espaco.md },
+  rotuloInterruptor: { fontWeight: '800', fontSize: tamanho.corpo, color: cores.texto },
 });

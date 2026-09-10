@@ -69,31 +69,49 @@ export async function criarApp(opcoes: OpcoesApp): Promise<FastifyInstance> {
       },
     });
 
-  app.get('/saude', async () => ({
+  const saude = async () => ({
     ok: true,
     modelo: config.modelo,
     questoesPorTema: config.questoesPorTema,
     // Sem chave a geracao nao roda; melhor dizer isso aqui do que falhar depois.
     chaveConfigurada: config.temChave,
-  }));
-
-  await app.register(async (instancia) => {
-    await rotasAuth(instancia, { repo });
   });
 
-  // Tudo daqui para baixo exige sessao. O guarda fica no escopo, nao em cada
-  // rota: assim nao existe a chance de esquecer numa rota nova.
-  await app.register(async (instancia) => {
-    instancia.addHook('preHandler', exigirSessao(repo));
-    await rotasMaterias(instancia, {
-      repo,
-      gerador,
-      fila,
-      ...(opcoes.segurar ? { segurar: opcoes.segurar } : {}),
-      questoesPorTema: config.questoesPorTema,
-    });
-    await rotasProgresso(instancia, { repo });
-  });
+  /**
+   * Toda a API mora sob `/api`. Nao e enfeite de arquitetura: o mesmo servidor
+   * serve o app, e app e API disputavam o mesmo espaco de enderecos. `/perfil`
+   * era rota das duas — quem recarregasse a aba Perfil recebia o JSON da API na
+   * cara do navegador em vez da tela. Com o prefixo, uma tela nova nunca mais
+   * pode colidir com uma rota nova.
+   */
+  await app.register(
+    async (api) => {
+      api.get('/saude', saude);
+
+      await api.register(async (instancia) => {
+        await rotasAuth(instancia, { repo });
+      });
+
+      // Tudo daqui para baixo exige sessao. O guarda fica no escopo, nao em
+      // cada rota: assim nao existe a chance de esquecer numa rota nova.
+      await api.register(async (instancia) => {
+        instancia.addHook('preHandler', exigirSessao(repo));
+        await rotasMaterias(instancia, {
+          repo,
+          gerador,
+          fila,
+          ...(opcoes.segurar ? { segurar: opcoes.segurar } : {}),
+          questoesPorTema: config.questoesPorTema,
+        });
+        await rotasProgresso(instancia, { repo });
+      });
+    },
+    { prefix: '/api' },
+  );
+
+  // `/saude` tambem na raiz: e o endereco que a documentacao e os monitores
+  // usam, e nenhuma tela do app se chama assim.
+  app.get('/saude', saude);
 
   // Tarefa concluida vira lixo depois de um tempo; sem isso a memoria so cresce.
   const faxina = setInterval(() => {

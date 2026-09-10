@@ -112,7 +112,10 @@ export default function Trilha() {
     try {
       const r = await api.concluir(sessao, materiaId!, temaId!, [...respostas, resposta.resposta].slice(0, questoes.length));
       setResultado(r);
+      // Ofensiva subindo e o momento do dia; concluir mais um tema tambem
+      // merece som, so que menor.
       if (r.ofensiva.subiu) retorno.conquista();
+      else retorno.conclusao();
       setConfete((c) => c + 1);
       await recarregar();
     } catch {

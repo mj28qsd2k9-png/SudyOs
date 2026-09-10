@@ -104,10 +104,10 @@ describe('rotas de autenticacao', () => {
   });
 
   const cadastrar = (payload: Record<string, unknown>) =>
-    app.inject({ method: 'POST', url: '/auth/cadastrar', payload });
+    app.inject({ method: 'POST', url: '/api/auth/cadastrar', payload });
 
   const entrar = (email: string, senha: string) =>
-    app.inject({ method: 'POST', url: '/auth/entrar', payload: { email, senha } });
+    app.inject({ method: 'POST', url: '/api/auth/entrar', payload: { email, senha } });
 
   it('cadastra e ja devolve sessao utilizavel', async () => {
     const r = await cadastrar({ email: 'ana@teste.com', senha: SENHA });
@@ -118,7 +118,7 @@ describe('rotas de autenticacao', () => {
 
     const eu = await app.inject({
       method: 'GET',
-      url: '/auth/eu',
+      url: '/api/auth/eu',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(eu.statusCode).toBe(200);
@@ -164,10 +164,10 @@ describe('rotas de autenticacao', () => {
     const { token } = (await cadastrar({ email: 'ana@teste.com', senha: SENHA })).json();
     const cab = { authorization: `Bearer ${token}` };
 
-    expect((await app.inject({ method: 'GET', url: '/perfil', headers: cab })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: '/auth/sair', headers: cab })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'GET', url: '/api/perfil', headers: cab })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/api/auth/sair', headers: cab })).statusCode).toBe(204);
 
-    const depois = await app.inject({ method: 'GET', url: '/perfil', headers: cab });
+    const depois = await app.inject({ method: 'GET', url: '/api/perfil', headers: cab });
     expect(depois.statusCode).toBe(401);
     expect(depois.json().codigo).toBe('sessao_invalida');
   });
@@ -179,14 +179,14 @@ describe('rotas de autenticacao', () => {
 
     await app.inject({
       method: 'POST',
-      url: '/auth/sair-de-todos',
+      url: '/api/auth/sair-de-todos',
       headers: { authorization: `Bearer ${a}` },
     });
 
     for (const token of [a, b]) {
       const r = await app.inject({
         method: 'GET',
-        url: '/perfil',
+        url: '/api/perfil',
         headers: { authorization: `Bearer ${token}` },
       });
       expect(r.statusCode).toBe(401);
@@ -201,7 +201,7 @@ describe('rotas de autenticacao', () => {
 
     const r = await app.inject({
       method: 'GET',
-      url: '/perfil',
+      url: '/api/perfil',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(r.statusCode).toBe(401);
@@ -233,13 +233,13 @@ describe('rotas protegidas', () => {
   });
 
   const protegidas: [string, string][] = [
-    ['GET', '/materias'],
-    ['GET', '/materias/qualquer'],
-    ['POST', '/materias'],
-    ['POST', '/materias/m/temas/t/gerar'],
-    ['GET', '/tarefas/qualquer'],
-    ['GET', '/perfil'],
-    ['POST', '/progresso/concluir'],
+    ['GET', '/api/materias'],
+    ['GET', '/api/materias/qualquer'],
+    ['POST', '/api/materias'],
+    ['POST', '/api/materias/m/temas/t/gerar'],
+    ['GET', '/api/tarefas/qualquer'],
+    ['GET', '/api/perfil'],
+    ['POST', '/api/progresso/concluir'],
   ];
 
   it.each(protegidas)('%s %s exige sessao', async (method, url) => {
@@ -251,14 +251,14 @@ describe('rotas protegidas', () => {
   it('token inventado nao passa', async () => {
     const r = await app.inject({
       method: 'GET',
-      url: '/perfil',
+      url: '/api/perfil',
       headers: { authorization: 'Bearer token-que-eu-inventei-agora' },
     });
     expect(r.statusCode).toBe(401);
   });
 
   it('/saude fica aberta, para monitoramento nao precisar de conta', async () => {
-    expect((await app.inject({ method: 'GET', url: '/saude' })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/saude' })).statusCode).toBe(200);
   });
 });
 
@@ -284,19 +284,19 @@ describe('trazer o que foi gerado antes da conta', () => {
 
     const r = await app.inject({
       method: 'POST',
-      url: '/auth/cadastrar',
+      url: '/api/auth/cadastrar',
       payload: { email: 'ana@teste.com', senha: SENHA, aparelho },
     });
     expect(r.statusCode).toBe(201);
     expect(r.json().materiasTrazidas).toBe(1);
 
     const cab = { authorization: `Bearer ${r.json().token}` };
-    const lista = await app.inject({ method: 'GET', url: '/materias', headers: cab });
+    const lista = await app.inject({ method: 'GET', url: '/api/materias', headers: cab });
     expect(lista.json().materias).toHaveLength(1);
     expect(lista.json().materias[0].nome).toBe('Biologia');
 
     // O material tambem veio: sem ele, gerar os outros temas pediria o PDF de novo.
-    const eu = await app.inject({ method: 'GET', url: '/auth/eu', headers: cab });
+    const eu = await app.inject({ method: 'GET', url: '/api/auth/eu', headers: cab });
     expect(await repo.obterBlocos(eu.json().usuarioId, 'm1')).toEqual(['conteudo do pdf']);
 
     // E nao ficou copia no aparelho: os dados mudaram de dono, nao foram clonados.
@@ -315,12 +315,12 @@ describe('trazer o que foi gerado antes da conta', () => {
 
     const primeira = await app.inject({
       method: 'POST',
-      url: '/auth/cadastrar',
+      url: '/api/auth/cadastrar',
       payload: { email: 'ana@teste.com', senha: SENHA },
     });
     const eu = await app.inject({
       method: 'GET',
-      url: '/auth/eu',
+      url: '/api/auth/eu',
       headers: { authorization: `Bearer ${primeira.json().token}` },
     });
     const idDaAna = eu.json().usuarioId as string;
@@ -335,14 +335,14 @@ describe('trazer o que foi gerado antes da conta', () => {
     // Bia tenta se cadastrar apontando para o id da Ana.
     const bia = await app.inject({
       method: 'POST',
-      url: '/auth/cadastrar',
+      url: '/api/auth/cadastrar',
       payload: { email: 'bia@teste.com', senha: SENHA, aparelho: idDaAna },
     });
     expect(bia.json().materiasTrazidas).toBe(0);
 
     const daAna = await app.inject({
       method: 'GET',
-      url: '/materias',
+      url: '/api/materias',
       headers: { authorization: `Bearer ${primeira.json().token}` },
     });
     expect(daAna.json().materias).toHaveLength(1);

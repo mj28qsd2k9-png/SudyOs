@@ -33,7 +33,7 @@ async function conta(app: FastifyInstance, nome = 'ana') {
 
   const r = await app.inject({
     method: 'POST',
-    url: '/auth/cadastrar',
+    url: '/api/auth/cadastrar',
     payload: { email: `${nome}@teste.com`, senha: SENHA },
   });
   expect(r.statusCode, `cadastro de ${nome} falhou: ${r.body}`).toBe(201);
@@ -41,7 +41,7 @@ async function conta(app: FastifyInstance, nome = 'ana') {
 
   const eu = await app.inject({
     method: 'GET',
-    url: '/auth/eu',
+    url: '/api/auth/eu',
     headers: { authorization: `Bearer ${token}` },
   });
   const nova = { token, usuarioId: eu.json().usuarioId as string };
@@ -65,7 +65,7 @@ async function cabecalhos(
 async function aguardarTarefa(app: FastifyInstance, tarefaId: string, usuario = 'ana') {
   const cab = await cabecalhos(app, usuario);
   for (let i = 0; i < 200; i += 1) {
-    const r = await app.inject({ method: 'GET', url: `/tarefas/${tarefaId}`, headers: cab });
+    const r = await app.inject({ method: 'GET', url: `/api/tarefas/${tarefaId}`, headers: cab });
     const t = r.json();
     if (t.estado === 'concluida' || t.estado === 'falhou') return t;
     await new Promise((r) => setImmediate(r));
@@ -81,7 +81,7 @@ async function subirEEsperar(
   const cab = await cabecalhos(app, usuario);
   const r = await app.inject({
     method: 'POST',
-    url: '/materias',
+    url: '/api/materias',
     headers: cab,
     payload: payload as object,
   });
@@ -90,7 +90,7 @@ async function subirEEsperar(
   if (tarefa.estado !== 'concluida') return { materia: null, tarefa };
   const m = await app.inject({
     method: 'GET',
-    url: `/materias/${tarefa.resultado.materiaId}`,
+    url: `/api/materias/${tarefa.resultado.materiaId}`,
     headers: cab,
   });
   return { materia: m.json().materia, tarefa };
@@ -118,7 +118,7 @@ describe('rotas de geracao', () => {
   const subirMaterial = (texto = MATERIAL) => subirEEsperar(app, { texto });
 
   it('responde /saude com o modelo em uso', async () => {
-    const r = await app.inject({ method: 'GET', url: '/saude' });
+    const r = await app.inject({ method: 'GET', url: '/api/saude' });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ ok: true, modelo: 'claude-sonnet-5', questoesPorTema: 8 });
   });
@@ -140,7 +140,7 @@ describe('rotas de geracao', () => {
   it('responde na hora e faz o trabalho em segundo plano', async () => {
     const r = await app.inject({
       method: 'POST',
-      url: '/materias',
+      url: '/api/materias',
       headers: await cabecalhos(app, 'ana'),
       payload: { texto: MATERIAL },
     });
@@ -156,13 +156,13 @@ describe('rotas de geracao', () => {
   it('nao entrega a tarefa de um usuario para outro', async () => {
     const r = await app.inject({
       method: 'POST',
-      url: '/materias',
+      url: '/api/materias',
       headers: await cabecalhos(app, 'ana'),
       payload: { texto: MATERIAL },
     });
     const espiando = await app.inject({
       method: 'GET',
-      url: `/tarefas/${r.json().tarefaId}`,
+      url: `/api/tarefas/${r.json().tarefaId}`,
       headers: await cabecalhos(app, 'carla'),
     });
     expect(espiando.statusCode).toBe(404);
@@ -186,7 +186,7 @@ describe('rotas de geracao', () => {
     // para dizer que o arquivo nao serve.
     const r = await app.inject({
       method: 'POST',
-      url: '/materias',
+      url: '/api/materias',
       headers: await cabecalhos(app, 'ana'),
       payload: { texto: 'pouco texto' },
     });
@@ -201,7 +201,7 @@ describe('rotas de geracao', () => {
 
     const r = await app.inject({
       method: 'POST',
-      url: `/materias/${materiaId}/temas/${segundoId}/gerar`,
+      url: `/api/materias/${materiaId}/temas/${segundoId}/gerar`,
       headers: await cabecalhos(app, 'ana'),
     });
     expect(r.statusCode).toBe(202);
@@ -209,7 +209,7 @@ describe('rotas de geracao', () => {
 
     const atual = await app.inject({
       method: 'GET',
-      url: `/materias/${materiaId}`,
+      url: `/api/materias/${materiaId}`,
       headers: await cabecalhos(app, 'ana'),
     });
     expect(atual.json().materia.temas[1].questoes).toHaveLength(8);
@@ -217,7 +217,7 @@ describe('rotas de geracao', () => {
     const antes = falso.chamadas.length;
     const denovo = await app.inject({
       method: 'POST',
-      url: `/materias/${materiaId}/temas/${segundoId}/gerar`,
+      url: `/api/materias/${materiaId}/temas/${segundoId}/gerar`,
       headers: await cabecalhos(app, 'ana'),
     });
     expect(denovo.statusCode).toBe(200); // ja pronto: responde sem abrir tarefa
@@ -230,7 +230,7 @@ describe('rotas de geracao', () => {
 
     const r = await outro.inject({
       method: 'POST',
-      url: '/materias',
+      url: '/api/materias',
       headers: await cabecalhos(outro, 'bia'),
       payload: { texto: MATERIAL },
     });
@@ -241,7 +241,7 @@ describe('rotas de geracao', () => {
     // A materia sobrevive: da para tentar gerar de novo sem subir o PDF outra vez.
     const lista = await outro.inject({
       method: 'GET',
-      url: '/materias',
+      url: '/api/materias',
       headers: await cabecalhos(outro, 'bia'),
     });
     expect(lista.json().materias).toHaveLength(1);
@@ -252,7 +252,7 @@ describe('rotas de geracao', () => {
     const { materia } = await subirMaterial();
     const r = await app.inject({
       method: 'GET',
-      url: `/materias/${materia.id}`,
+      url: `/api/materias/${materia.id}`,
       headers: await cabecalhos(app, 'carla'),
     });
     expect(r.statusCode).toBe(404);
@@ -273,7 +273,7 @@ describe('cota', () => {
 
     const r = await app.inject({
       method: 'POST',
-      url: '/materias',
+      url: '/api/materias',
       headers: await cabecalhos(app, 'duda'),
       payload: { texto: MATERIAL },
     });
@@ -309,7 +309,7 @@ describe('conclusao de tema', () => {
 
     const r = await app.inject({
       method: 'POST',
-      url: '/progresso/concluir',
+      url: '/api/progresso/concluir',
       headers: await cabecalhos(app, 'ana'),
       payload: { materiaId, temaId: tema.id, respostas },
     });
@@ -326,7 +326,7 @@ describe('conclusao de tema', () => {
     const { materiaId, tema } = await temaPronto();
     const r = await app.inject({
       method: 'POST',
-      url: '/progresso/concluir',
+      url: '/api/progresso/concluir',
       headers: await cabecalhos(app, 'ana'),
       payload: {
         materiaId,
@@ -347,7 +347,7 @@ describe('conclusao de tema', () => {
     const concluir = () =>
       app.inject({
         method: 'POST',
-        url: '/progresso/concluir',
+        url: '/api/progresso/concluir',
         headers: cab,
         payload: { materiaId, temaId: tema.id, respostas: [] },
       });
@@ -366,7 +366,7 @@ describe('conclusao de tema', () => {
 
     const conclusao = await app.inject({
       method: 'POST',
-      url: '/progresso/concluir',
+      url: '/api/progresso/concluir',
       headers: await cabecalhos(app, 'ana'),
       payload: { materiaId: materia.id, temaId: naoGerado.id, respostas: [] },
     });
@@ -377,14 +377,14 @@ describe('conclusao de tema', () => {
     const { materiaId, tema } = await temaPronto();
     await app.inject({
       method: 'POST',
-      url: '/progresso/concluir',
+      url: '/api/progresso/concluir',
       headers: await cabecalhos(app, 'ana'),
       payload: { materiaId, temaId: tema.id, respostas: [] },
     });
 
     const r = await app.inject({
       method: 'GET',
-      url: '/perfil',
+      url: '/api/perfil',
       headers: await cabecalhos(app, 'ana', { 'x-fuso': 'America/Sao_Paulo' }),
     });
     const corpo = r.json();
@@ -398,7 +398,7 @@ describe('conclusao de tema', () => {
   it('ignora fuso invalido vindo do cliente em vez de quebrar', async () => {
     const r = await app.inject({
       method: 'GET',
-      url: '/perfil',
+      url: '/api/perfil',
       headers: await cabecalhos(app, 'ana', { 'x-fuso': 'Nao/Existe' }),
     });
     expect(r.statusCode).toBe(200);
@@ -413,7 +413,7 @@ describe('cota no perfil', () => {
 
     const livre = await app.inject({
       method: 'GET',
-      url: '/perfil',
+      url: '/api/perfil',
       headers: await cabecalhos(app, 'livre'),
     });
     expect(livre.json().cota).toMatchObject({ ilimitada: true, temasRestantes: null });
@@ -426,7 +426,7 @@ describe('cota no perfil', () => {
 
     const pago = await app.inject({
       method: 'GET',
-      url: '/perfil',
+      url: '/api/perfil',
       headers: await cabecalhos(app, 'pago'),
     });
     expect(pago.json().cota).toMatchObject({ ilimitada: false, temasRestantes: 2 });
@@ -458,7 +458,7 @@ async function lerFixturePdf() {
 async function enviarArquivo(app: FastifyInstance, corpo: Buffer, usuario = 'ana') {
   return app.inject({
     method: 'POST',
-    url: '/materias',
+    url: '/api/materias',
     headers: await cabecalhos(app, usuario, {
       'content-type': `multipart/form-data; boundary=${LIMITE}`,
     }),
@@ -482,7 +482,7 @@ describe('upload de PDF', () => {
 
     const m = await app.inject({
       method: 'GET',
-      url: `/materias/${tarefa.resultado.materiaId}`,
+      url: `/api/materias/${tarefa.resultado.materiaId}`,
       headers: await cabecalhos(app, 'ana'),
     });
     // Nome de arquivo especifico vence o da IA: foi o aluno que escolheu.
@@ -519,7 +519,7 @@ describe('nome da materia', () => {
     const tarefa = await aguardarTarefa(app, r.json().tarefaId);
     const m = await app.inject({
       method: 'GET',
-      url: `/materias/${tarefa.resultado.materiaId}`,
+      url: `/api/materias/${tarefa.resultado.materiaId}`,
       headers: await cabecalhos(app, 'ana'),
     });
     await app.close();

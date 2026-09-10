@@ -9,6 +9,7 @@ import {
   type Sessao,
 } from '../api/cliente';
 import { apagarToken, guardarToken, lerToken } from './cofre';
+import { definirSom as definirSomGlobal } from '../ui/som';
 
 /**
  * Estado do app.
@@ -23,6 +24,7 @@ const CHAVE_ONBOARDING = 'estudaai:onboarding';
 const CHAVE_NOTAS = 'estudaai:notas';
 const CHAVE_META = 'estudaai:meta';
 const CHAVE_APARELHO = 'estudaai:aparelho';
+const CHAVE_SOM = 'estudaai:som';
 
 export type Anotacao = {
   id: string;
@@ -41,6 +43,7 @@ type Contexto = {
   objetivo: string | null;
   onboardingFeito: boolean;
   metaDiaria: number;
+  som: boolean;
   materias: Materia[];
   perfil: Perfil | null;
   erroRede: string | null;
@@ -50,6 +53,7 @@ type Contexto = {
   sair: () => Promise<void>;
   concluirOnboarding: (objetivo: string | null) => Promise<void>;
   definirMeta: (n: number) => void;
+  definirSom: (ligado: boolean) => void;
   recarregar: () => Promise<void>;
   adicionarAnotacao: (a: Omit<Anotacao, 'id'>) => void;
   removerAnotacao: (id: string) => void;
@@ -69,6 +73,7 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
   const [objetivo, setObjetivo] = useState<string | null>(null);
   const [onboardingFeito, setOnboardingFeito] = useState(false);
   const [metaDiaria, setMetaDiaria] = useState(3);
+  const [som, setSom] = useState(true);
   const [materias, setMaterias] = useState<Materia[]>([]);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [erroRede, setErroRede] = useState<string | null>(null);
@@ -79,7 +84,13 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
       try {
         const [token, guardado] = await Promise.all([
           lerToken(),
-          AsyncStorage.getMany([CHAVE_ONBOARDING, CHAVE_NOTAS, CHAVE_META, CHAVE_APARELHO]),
+          AsyncStorage.getMany([
+            CHAVE_ONBOARDING,
+            CHAVE_NOTAS,
+            CHAVE_META,
+            CHAVE_APARELHO,
+            CHAVE_SOM,
+          ]),
         ]);
 
         if (token) setSessao({ token, fuso: fusoDeAgora() });
@@ -94,6 +105,13 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
         if (notas) setAnotacoes(JSON.parse(notas) as Anotacao[]);
         const meta = guardado[CHAVE_META];
         if (meta) setMetaDiaria(Number(meta) || 3);
+        // Som comeca ligado: e o que combate o tedio de conteudo arido, e quem
+        // nao quiser desliga no perfil. So respeitamos o "nao" explicito.
+        const somSalvo = guardado[CHAVE_SOM];
+        const ligado = somSalvo === null || somSalvo === undefined ? true : somSalvo === '1';
+        setSom(ligado);
+        definirSomGlobal(ligado);
+
         // Id de quem usou o app antes de existir login; some depois de trazido.
         setAparelho(guardado[CHAVE_APARELHO] ?? null);
       } catch {
@@ -181,6 +199,12 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
     void AsyncStorage.setItem(CHAVE_META, String(n)).catch(() => {});
   }, []);
 
+  const definirSom = useCallback((ligado: boolean) => {
+    setSom(ligado);
+    definirSomGlobal(ligado);
+    void AsyncStorage.setItem(CHAVE_SOM, ligado ? '1' : '0').catch(() => {});
+  }, []);
+
   const guardarNotas = useCallback((lista: Anotacao[]) => {
     setAnotacoes(lista);
     void AsyncStorage.setItem(CHAVE_NOTAS, JSON.stringify(lista)).catch(() => {});
@@ -210,6 +234,7 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
       objetivo,
       onboardingFeito,
       metaDiaria,
+      som,
       materias,
       perfil,
       erroRede,
@@ -219,6 +244,7 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
       sair,
       concluirOnboarding,
       definirMeta,
+      definirSom,
       recarregar,
       adicionarAnotacao,
       removerAnotacao,
@@ -230,6 +256,7 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
       objetivo,
       onboardingFeito,
       metaDiaria,
+      som,
       materias,
       perfil,
       erroRede,
@@ -239,6 +266,7 @@ export function ProvedorEstado({ children }: { children: React.ReactNode }) {
       sair,
       concluirOnboarding,
       definirMeta,
+      definirSom,
       recarregar,
       adicionarAnotacao,
       removerAnotacao,

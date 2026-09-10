@@ -43,7 +43,7 @@ chamadas — e por serem regras podem rodar nos dois lados sem divergir.
 ## O caminho de uma matéria
 
 ```
-PDF ──(pdf.js, no cliente)──► texto ──► POST /materias
+PDF ──(pdf.js, no cliente)──► texto ──► POST /api/materias
                                           │
                                           ├─ fatiar em blocos de 2.800 chars
                                           ├─ amostrar o documento INTEIRO ──► mapear temas (1 chamada)
@@ -192,7 +192,7 @@ dois pontos:
 - **A data vem do servidor.** O cliente manda no máximo o fuso (`x-fuso`); quem
   decide que dia é hoje é `Date.now()` do servidor formatado naquele fuso. Mudar
   o relógio do aparelho não muda nada.
-- **O placar vem do servidor.** `POST /progresso/concluir` recebe as
+- **O placar vem do servidor.** `POST /api/progresso/concluir` recebe as
   **respostas**, não os acertos. Quem corrige, conta XP e move a ofensiva é o
   servidor. Placar enviado pelo cliente é pedido, não fato.
 
@@ -392,15 +392,32 @@ model Anotacao {
 }
 ```
 
+## Som
+
+O protótipo sintetizava com Web Audio, que não existe em React Native. Em vez de
+procurar biblioteca de efeitos com licença, `scripts/gerar-sons.mjs` **sintetiza**
+os cinco arquivos (`acerto`, `erro`, `conclusao`, `ofensiva`, `toque`) nas mesmas
+frequências do protótipo e grava WAV mono 22 kHz. São ~100 KB no total,
+versionados: não dependem de rede, de licença nem de CDN, e regerar é um comando.
+
+Três decisões que valem mais que o som:
+
+- **Nunca interrompe música.** `interruptionMode: 'mixWithOthers'`. Quem estuda
+  ouvindo algo não pode ser silenciado pelo app a cada acerto.
+- **Nunca bloqueia nem quebra.** Aparelho sem áudio disponível segue mudo;
+  `apps/mobile/src/ui/som.ts` engole a falha.
+- **Dá para desligar.** Preferência `estudaai:som` no Perfil, ligada por padrão.
+  Estudar em aula ou no ônibus sem fone é caso real.
+
+`apps/mobile/src/ui/retorno.ts` dispara som e vibração juntos — a tela chama
+`retorno.acerto()`, não os dois separadamente, e é isso que impede uma tela nova
+de vibrar sem tocar.
+
 ## O que ainda é provisório (e está marcado no código)
 
 - **Identidade.** `apps/api/src/rotas/contexto.ts` lê o usuário de um cabeçalho,
   sem verificar nada. Todo o resto do código já trata o id como confiável, então
   ligar a autenticação de verdade é mudar só esse arquivo.
-- **Som.** O protótipo sintetizava som com Web Audio; React Native não tem
-  equivalente e som exigiria arquivos de áudio, que ainda não existem. O app
-  entrega vibração (`expo-haptics`), que no celular é o retorno que mais se
-  sente.
 - **Recuperação de senha.** Não existe. Quem esquecer a senha perde a conta até
   o envio de e-mail entrar.
 - **Anotações.** O app guarda grifos e notas no aparelho (`AsyncStorage`); o

@@ -52,9 +52,6 @@ com o tempo.
 **Notificações push.** Lembrete de ofensiva pelo Expo Notifications. É o
 ingrediente que traz a pessoa de volta.
 
-**Som.** O protótipo sintetizava com Web Audio, que não existe em React Native.
-O app entrega vibração; som precisa de arquivos de áudio.
-
 **Assinatura.** A cota já é aplicada no servidor e o plano `basico` já vale 80
 questões/mês; falta o gateway e mudar o plano depois do pagamento.
 

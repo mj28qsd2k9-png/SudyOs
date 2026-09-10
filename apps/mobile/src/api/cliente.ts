@@ -27,12 +27,21 @@ const CONFIGURADO =
   (Constants.expoConfig?.extra?.['apiUrl'] as string | undefined) ||
   '';
 
-const BASE: string =
+const ORIGEM: string =
   CONFIGURADO ||
   (Platform.OS === 'web'
     ? '' // mesma origem
     : 'http://localhost:3333'); // no aparelho isso aponta para o proprio
                                 // aparelho — configure extra.apiUrl.
+
+/**
+ * `/api` na frente de tudo.
+ *
+ * O backend serve o app no mesmo endereco, entao API e telas dividiam o espaco
+ * de enderecos: `/perfil` era rota das duas, e recarregar a aba Perfil
+ * devolvia JSON. O prefixo separa os dois para sempre.
+ */
+const BASE = `${ORIGEM}/api`;
 
 export class ErroApi extends Error {
   constructor(

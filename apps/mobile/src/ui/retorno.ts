@@ -1,13 +1,14 @@
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+import { tocar } from './som';
 
 /**
- * Retorno tatil.
+ * Retorno ao aluno: som e vibracao juntos.
  *
- * O prototipo tambem sintetizava som com Web Audio. React Native nao tem
- * equivalente: som exigiria arquivos de audio, que ainda nao existem. Vibrar
- * e o que da para entregar hoje com honestidade — e no celular e o retorno que
- * mais se sente. O som entra junto com os assets.
+ * Os dois existem porque nenhum cobre todo mundo — quem estuda no silencioso so
+ * sente a vibracao, quem esta com o celular na mesa so ouve o som. E conteudo
+ * arido (contabilidade, direito) e justamente onde o retorno imediato segura a
+ * pessoa na tela.
  */
 
 function seguro(fn: () => Promise<void>) {
@@ -17,8 +18,24 @@ function seguro(fn: () => Promise<void>) {
 }
 
 export const retorno = {
-  toque: () => seguro(() => Haptics.selectionAsync()),
-  acerto: () => seguro(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)),
-  erro: () => seguro(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)),
-  conquista: () => seguro(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)),
+  toque: () => {
+    tocar('toque');
+    seguro(() => Haptics.selectionAsync());
+  },
+  acerto: () => {
+    tocar('acerto');
+    seguro(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
+  },
+  erro: () => {
+    tocar('erro');
+    seguro(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error));
+  },
+  conclusao: () => {
+    tocar('conclusao');
+    seguro(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+  },
+  conquista: () => {
+    tocar('ofensiva');
+    seguro(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy));
+  },
 };
