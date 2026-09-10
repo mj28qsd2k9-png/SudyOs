@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MARCOS } from '@estudaai/shared';
 import { useEstado } from '../src/dados/estado';
 import { Barra, Cartao } from '../src/ui/componentes';
-import { Chama, Escudo } from '../src/ui/icones';
+import { ChamaViva, Escudo } from '../src/ui/icones';
 import { voltar } from '../src/ui/navegar';
 import { retorno } from '../src/ui/retorno';
 import { cores, espaco, raio, tamanho } from '../src/ui/tema';
@@ -50,7 +50,7 @@ export default function Ofensiva() {
         </Pressable>
 
         <View style={e.heroi}>
-          <Chama tamanho={64} />
+          <ChamaViva tamanho={64} />
           <Text style={e.numeroGrande}>{streak}</Text>
           <Text style={e.legenda}>
             DIAS DE OFENSIVA · RECORDE {recorde}

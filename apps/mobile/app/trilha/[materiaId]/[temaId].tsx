@@ -7,7 +7,7 @@ import { useEstado, useSessao } from '../../../src/dados/estado';
 import { api, type ResultadoConclusao } from '../../../src/api/cliente';
 import { Barra, Botao, NumeroQueSobe, Pulinho, Sacudida } from '../../../src/ui/componentes';
 import { Confete } from '../../../src/ui/confete';
-import { Chama } from '../../../src/ui/icones';
+import { ChamaViva } from '../../../src/ui/icones';
 import { RenderQuestao, rotuloDoTipo, type EstadoResposta } from '../../../src/ui/questao';
 import { voltar } from '../../../src/ui/navegar';
 import { retorno } from '../../../src/ui/retorno';
@@ -398,7 +398,7 @@ function Conclusao({
     <ScrollView contentContainerStyle={e.corpoFim}>
       {subiu ? (
         <>
-          <Chama tamanho={72} />
+          <ChamaViva tamanho={72} />
           <NumeroQueSobe ate={resultado!.ofensiva.streak} estilo={e.numeroOfensiva} />
           <Text style={e.tituloFim}>dias de ofensiva!</Text>
         </>

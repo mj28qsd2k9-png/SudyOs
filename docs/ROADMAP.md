@@ -85,7 +85,24 @@ significa: escolher o host, apontar `DATABASE_URL`, rodar os testes do
 repositório contra o Postgres e adaptar o entrypoint. Um host com processo longo
 e disco (Render, Fly, Railway) roda o código como está, sem nada disso.
 
-**Animação de personagem.** Assets Rive ou Lottie. Não sai por código.
+**Animação de personagem.** Assets Rive (`.riv`) ou Lottie. Não sai por código —
+precisa de animador ou de arquivo pronto.
+
+O caminho legítimo é a [Rive Community](https://rive.app/community/files/): os
+arquivos de lá são **CC BY**, uso comercial liberado mediante crédito ao autor, e
+o runtime é MIT. **O que não dá é usar os personagens do Duolingo**: Duo é marca
+registrada (Reg. #4588574) e a arte é protegida — qualquer `.riv` dele que
+apareça no GitHub foi extraído do app.
+
+Tem um custo técnico a considerar antes: o `@rive-app/react-native` oficial **não
+funciona na web**, e web é como o app roda hoje (`npm start`, um endereço só). O
+wrapper da comunidade `rive-rnw` cobre web e celular, mas é dependência de
+terceiro para uma coisa que é enfeite.
+
+Antes disso, o movimento que dá para fazer em código já foi feito: confete,
+mola, cascata, contador que sobe e a **chama tremeluzente** da ofensiva (portada
+do protótipo, com o giro preso na base — e parada para quem pede menos
+movimento no sistema).
 
 ## Ideias que o código já deixou prontas
 

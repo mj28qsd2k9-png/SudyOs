@@ -1,5 +1,5 @@
-import React from 'react';
-import type { ColorValue } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, type ColorValue } from 'react-native';
 import Svg, { Circle, Path, type SvgProps } from 'react-native-svg';
 import { cores } from './tema';
 
@@ -18,6 +18,86 @@ export function Chama({ tamanho = 22, cor = cores.laranja, ...rest }: Props) {
         d="M12 2c1 3-1 4-2 6-2 3 0 5 2 5 1 0 2-1 2-3 3 2 3 6 0 8-4 3-10 1-11-4-1-4 2-7 4-9 3-3 4-6 5-3z"
       />
     </Svg>
+  );
+}
+
+/**
+ * A chama da ofensiva, tremeluzindo.
+ *
+ * Portada do prototipo, que fazia isso em CSS:
+ *
+ *   @keyframes flick { 0%,100% { scale(1) rotate(-1.5deg) }
+ *                      50%     { scale(1.07) rotate(1.5deg) } }
+ *   animation: flick 1.5s ease-in-out infinite;
+ *   transform-origin: center bottom;
+ *
+ * O ponto de giro embaixo e o que faz parecer fogo em vez de logo girando: a
+ * base fica presa e so a ponta balanca.
+ *
+ * So nas chamas grandes (ofensiva, fim de trilha, onboarding). A do cabecalho
+ * tem 20px e fica na tela o tempo inteiro — ali o tremor vira cocega no olho,
+ * e o prototipo tambem nao animava aquela.
+ *
+ * Quem pediu menos movimento no sistema recebe a chama parada: animacao em
+ * laco infinito e exatamente o caso que a preferencia existe para desligar.
+ */
+export function ChamaViva({ tamanho = 64, cor, ...rest }: Props) {
+  const anim = useRef(new Animated.Value(0)).current;
+  const [parada, setParada] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduzir) => {
+      if (vivo) setParada(reduzir);
+    });
+    const ouvinte = AccessibilityInfo.addEventListener('reduceMotionChanged', setParada);
+    return () => {
+      vivo = false;
+      ouvinte.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (parada) return;
+    const laco = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 750,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    laco.start();
+    return () => laco.stop();
+  }, [anim, parada]);
+
+  if (parada) return <Chama tamanho={tamanho} {...(cor ? { cor } : {})} {...rest} />;
+
+  return (
+    <Animated.View
+      style={{
+        transformOrigin: 'center bottom',
+        transform: [
+          { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] }) },
+          {
+            rotate: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['-1.5deg', '1.5deg'],
+            }),
+          },
+        ],
+      }}
+    >
+      <Chama tamanho={tamanho} {...(cor ? { cor } : {})} {...rest} />
+    </Animated.View>
   );
 }
 

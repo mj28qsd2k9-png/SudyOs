@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEstado } from '../src/dados/estado';
 import { Botao, EmCascata } from '../src/ui/componentes';
-import { Chama, Livro } from '../src/ui/icones';
+import { ChamaViva, Livro } from '../src/ui/icones';
 import { retorno } from '../src/ui/retorno';
 import { cores, espaco, raio, tamanho } from '../src/ui/tema';
 
@@ -114,7 +114,7 @@ function Habito() {
   return (
     <View style={e.centro}>
       <View style={[e.logo, { backgroundColor: cores.amarelo }]}>
-        <Chama tamanho={52} cor="#fff" />
+        <ChamaViva tamanho={52} cor="#fff" />
       </View>
       <Text style={e.tituloGrande}>Bora criar o hábito</Text>
       <Text style={e.paragrafo}>
