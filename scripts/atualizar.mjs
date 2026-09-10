@@ -18,6 +18,7 @@
  *   com o que ja esta na maquina.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -138,14 +139,21 @@ if (!buscou) {
 
 // 5) Dependencia nova? So instala se mudou — instalar a toa custa minuto.
 const depois = git(['rev-parse', 'HEAD'], { silencioso: true });
+
+// Clone recem-feito nao tem `node_modules`, e a comparacao de commits nunca
+// acusaria isso — nada "mudou", so nunca foi instalado. Sem esta condicao o
+// script seguia direto para o `npm start`, que morria em "dependencias
+// faltando" logo depois de dizer que estava tudo certo.
+const semDependencias = !existsSync(path.join(raiz, 'node_modules', 'fastify'));
+
 const mudouLock =
   antes !== depois &&
   git(['diff', '--name-only', antes, depois], { silencioso: true })
     .split('\n')
     .some((l) => l.endsWith('package.json') || l.endsWith('package-lock.json'));
 
-if (mudouLock) {
-  passo('Dependencias mudaram, instalando...');
+if (mudouLock || semDependencias) {
+  passo(semDependencias ? 'Instalando as dependencias...' : 'Dependencias mudaram, instalando...');
   const r = spawnSync('npm', ['install'], { cwd: raiz, stdio: 'inherit' });
   if (r.status !== 0) pare('a instalacao falhou', 'Rode `npm install` e leia o erro.');
   ok('dependencias em dia');
