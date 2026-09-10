@@ -140,6 +140,34 @@ if (!buscou) {
 // 5) Dependencia nova? So instala se mudou — instalar a toa custa minuto.
 const depois = git(['rev-parse', 'HEAD'], { silencioso: true });
 
+/**
+ * O atualizador se atualiza — e ai ele precisa recomecar.
+ *
+ * O Node ja leu este arquivo para a memoria quando o processo comecou. Se a
+ * atualizacao que acabou de entrar mexeu justamente nele, o que continua
+ * rodando e a versao ANTIGA: a correcao chega no disco e so vale na proxima
+ * vez. Foi o que aconteceu na primeira vez que rodei isto num clone limpo — o
+ * conserto de "instalar quando falta node_modules" veio junto no pull e nao
+ * teve efeito nenhum naquela execucao.
+ *
+ * Entao, se este arquivo mudou, o processo se troca pela versao nova.
+ */
+const esteArquivo = path.relative(raiz, fileURLToPath(import.meta.url));
+if (
+  antes !== depois &&
+  git(['diff', '--name-only', antes, depois], { silencioso: true })
+    .split('\n')
+    .some((l) => l === esteArquivo.split(path.sep).join('/'))
+) {
+  console.log(`\n  ${cor.amarelo}!${cor.fim} o proprio atualizador mudou; recomecando com a versao nova`);
+  const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], {
+    cwd: raiz,
+    stdio: 'inherit',
+    env: { ...process.env, ESTUDAAI_JA_ATUALIZOU: '1' },
+  });
+  process.exit(r.status ?? 1);
+}
+
 // Clone recem-feito nao tem `node_modules`, e a comparacao de commits nunca
 // acusaria isso — nada "mudou", so nunca foi instalado. Sem esta condicao o
 // script seguia direto para o `npm start`, que morria em "dependencias
