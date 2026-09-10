@@ -50,6 +50,29 @@ recuperação de senha e as anotações no servidor.
 
 ## Rodando na sua máquina
 
+**Já clonou antes? Um comando só:**
+
+```bash
+npm run atualizar
+```
+
+Ele puxa o código novo, instala o que mudou de dependência, monta o app e sobe
+tudo em `http://localhost:3333`. Existe porque a sequência manual tem quatro
+passos em que **esquecer um não dá erro** — dá um app que abre normalmente, com
+o código de ontem, e a conclusão natural é "o recurso novo não funciona".
+
+Ele nunca passa por cima do seu trabalho: se houver mudança não salva no clone,
+ele para e explica.
+
+**Não sabe se o que está na tela é o atual?** O Perfil mostra a versão em
+"Sobre", e o servidor responde a mesma coisa:
+
+```bash
+curl -s localhost:3333/saude      # o campo "app" é a build que está no ar
+git log -1 --format=%h            # e este é o código que você tem
+```
+
+
 Precisa de **Node 22.5 ou mais novo** (o projeto usa o SQLite embutido do Node).
 Confira com `node -v`; se for mais antigo, instale em [nodejs.org](https://nodejs.org).
 

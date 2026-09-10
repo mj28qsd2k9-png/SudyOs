@@ -14,6 +14,7 @@
   },
   "scripts": {
     "start": "npm run verificar && npm run build && npm run build:app && npm run start --workspace @estudaai/api",
+    "atualizar": "node scripts/atualizar.mjs",
     "verificar": "node scripts/verificar.mjs",
     "diagnosticar": "node scripts/diagnosticar.mjs",
     "dev": "npm run verificar && npm run build --workspace @estudaai/shared && MODO_DEV=1 npm run dev --workspace @estudaai/api",

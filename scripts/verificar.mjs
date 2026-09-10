@@ -208,7 +208,39 @@ function achar(pasta, casa, encontrados = []) {
   return encontrados;
 }
 
-// 6) macOS: limite de arquivos abertos. O Metro abre muito arquivo de uma vez,
+// 6) Tem versao nova esperando no GitHub?
+//
+// Barato e silencioso de proposito: dois segundos de teto, e qualquer falha
+// (sem git, sem rede, sem branch remoto) simplesmente nao diz nada. Um
+// verificador que trava porque o Wi-Fi caiu e pior do que um que nao avisa.
+try {
+  const { execFileSync } = require('node:child_process');
+  const git = (args, ms = 2500) =>
+    execFileSync('git', args, {
+      cwd: raiz,
+      encoding: 'utf8',
+      timeout: ms,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+
+  const remoto = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+  const [origem, ...resto] = remoto.split('/');
+  git(['fetch', origem, resto.join('/')], 6000);
+  const atras = Number(git(['rev-list', '--count', `HEAD..${remoto}`]));
+  if (atras > 0) {
+    aviso(
+      `tem ${atras} atualizacao(oes) do app esperando no GitHub`,
+      'Rode `npm run atualizar`: ele puxa, instala o que mudou, monta o app e sobe. ' +
+        'Um comando so.',
+    );
+  } else {
+    ok('projeto na versao mais nova');
+  }
+} catch {
+  // Sem git, sem rede ou sem branch remoto: seguir sem falar nada.
+}
+
+// 7) macOS: limite de arquivos abertos. O Metro abre muito arquivo de uma vez,
 // e o padrao do Mac (256) e baixo demais — a build morre com EMFILE, que nao
 // diz "aumente o ulimit".
 if (process.platform === 'darwin') {

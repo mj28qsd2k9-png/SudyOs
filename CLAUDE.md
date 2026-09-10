@@ -14,6 +14,7 @@ UX e de lógica. Ele não é código de produção.
 
 ```bash
 npm install
+npm run atualizar    # ja tem o clone: puxa, instala se mudou, monta e sobe
 npm start            # usar: monta o app e serve tudo em http://localhost:3333
 npm run verificar    # so confere o ambiente, nao sobe nada
 npm run diagnosticar # montagem do app falhando: junta ambiente + causa real
@@ -34,6 +35,12 @@ API importam o `dist`, e esquecer disso da um erro de modulo que nao parece com
 "voce esqueceu de compilar".
 
 O `.env` da raiz e lido pelo `--env-file-if-exists` do Node, sem dotenv.
+
+A montagem do app usa `--clear` sempre. O Metro guarda a transformacao pelo
+conteudo do arquivo, e o carimbo de versao vem do ambiente — sem limpar, a build
+sai com o carimbo da anterior e a tela passa a mentir sobre qual versao esta no
+ar. Custa 21s a mais e evita a falha que mais se repetiu aqui: artefato velho
+sendo servido enquanto se procura o defeito no codigo novo.
 
 ## Convenções
 
